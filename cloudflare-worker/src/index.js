@@ -1,4 +1,4 @@
-const MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
+const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -207,8 +207,8 @@ function publicCampaign(campaign) {
   const c = campaign && typeof campaign === "object" ? campaign : {};
   const character = c.character || {};
   const memory = c.memory || {};
-  const messages = Array.isArray(c.messages) ? c.messages.slice(-14) : [];
-  const rolls = Array.isArray(c.rolls) ? c.rolls.slice(-8) : [];
+  const messages = Array.isArray(c.messages) ? c.messages.slice(-8) : [];
+  const rolls = Array.isArray(c.rolls) ? c.rolls.slice(-5) : [];
   const combat = c.combat || null;
   return {
     title: clip(c.title, 120),
@@ -216,7 +216,7 @@ function publicCampaign(campaign) {
     phase: c.phase,
     lastEvent: clip(c.lastEvent, 2500),
     config: {
-      premise: clip(c.config?.premise, 6000),
+      premise: clip(c.config?.premise, 3600),
       mode: clip(c.config?.mode, 30),
       genre: clip(c.config?.genre, 100),
       setting: clip(c.config?.setting, 180),
@@ -237,7 +237,7 @@ function publicCampaign(campaign) {
       name: clip(character.name, 100),
       concept: clip(character.concept, 180),
       ancestry: clip(character.ancestry, 120),
-      background: clip(character.background, 2500),
+      background: clip(character.background, 1500),
       classId: character.classId,
       level: character.level,
       xp: character.xp,
@@ -259,16 +259,16 @@ function publicCampaign(campaign) {
     messages: messages.map((m) => ({
       role: m.role,
       speaker: clip(m.speaker, 80),
-      text: clip(m.text, 1600),
+      text: clip(m.text, 900),
       roll: m.roll ? {
         purpose: clip(m.roll.purpose, 300), total: m.roll.total, natural: m.roll.natural,
         success: m.roll.success, critical: m.roll.critical, values: m.roll.values,
       } : undefined,
     })),
     memory: {
-      summary: clip(memory.summary, 8000),
-      entities: Array.isArray(memory.entities) ? memory.entities.slice(-30) : [],
-      decisions: Array.isArray(memory.decisions) ? memory.decisions.slice(-20) : [],
+      summary: clip(memory.summary, 4200),
+      entities: Array.isArray(memory.entities) ? memory.entities.slice(-18) : [],
+      decisions: Array.isArray(memory.decisions) ? memory.decisions.slice(-12) : [],
       flags: memory.flags || {},
       day: memory.day,
       minute: memory.minute,
@@ -294,7 +294,7 @@ function publicCampaign(campaign) {
       })) : [],
     } : null,
     rolls,
-    gmVault: clip(c.gmVault, 10000),
+    gmVault: clip(c.gmVault, 6000),
     lastRestAvailable: Boolean(c.lastRestAvailable),
   };
 }
@@ -343,6 +343,7 @@ NARRACIÓN
 - Los diálogos de NPC pueden ir como kind=npc con speaker real.
 - No escribas listas de opciones salvo que la situación lo exija. Termina en un punto donde el jugador pueda actuar.
 - Nunca narres que el personaje del jugador decide, acepta, siente o actúa si el usuario no lo declaró.
+- Nunca escribas "el jugador debe decidir", "¿qué hace el jugador?" ni hables del usuario como una entidad externa. Háblale directamente en segunda persona o usa el nombre del personaje.
 - No repitas la premisa ni resumas innecesariamente lo recién ocurrido.
 
 MEMORIA
@@ -388,14 +389,61 @@ function normalizeResponse(raw, campaign) {
   return out;
 }
 
+function parseJSONLoose(value) {
+  if (value && typeof value === "object") return value;
+  if (typeof value !== "string") return null;
+  let text = value.trim();
+  text = text.replace(/^\`\`\`(?:json)?\s*/i,"").replace(/\s*\`\`\`$/,"").trim();
+  try { return JSON.parse(text); } catch {}
+  const start = text.indexOf("{"), end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(text.slice(start,end+1)); } catch {}
+  }
+  return null;
+}
+
 function modelResponseObject(result) {
   if (!result) return null;
-  if (result.response && typeof result.response === "object") return result.response;
-  if (typeof result.response === "string") {
-    try { return JSON.parse(result.response); } catch {}
+  const candidates = [
+    result.response,
+    result.result?.response,
+    result.choices?.[0]?.message?.parsed,
+    result.choices?.[0]?.message?.content,
+    result.output_text
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseJSONLoose(candidate);
+    if (parsed) return parsed;
   }
   if (typeof result === "object" && !Array.isArray(result) && (result.narrative || result.memory)) return result;
   return null;
+}
+
+async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.5,top_p=0.9}) {
+  const request = {
+    messages,
+    response_format: { type:"json_schema", json_schema:schema },
+    max_tokens,
+    temperature,
+    top_p,
+    repetition_penalty: 1.05,
+  };
+  let firstError = null;
+  for (let attempt=0; attempt<2; attempt++) {
+    try {
+      const result = await env.AI.run(MODEL, {
+        ...request,
+        temperature: attempt === 0 ? temperature : 0.25,
+        max_tokens: attempt === 0 ? max_tokens : Math.min(max_tokens,760),
+      });
+      const parsed = modelResponseObject(result);
+      if (parsed) return parsed;
+      firstError ||= new Error("EMPTY_OR_INVALID_JSON");
+    } catch (error) {
+      firstError ||= error;
+    }
+  }
+  throw firstError || new Error("STRUCTURED_OUTPUT_FAILED");
 }
 
 export default {
@@ -410,13 +458,13 @@ export default {
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/connection")) {
       if (url.pathname === "/api/connection") {
-        return json({connected:true,model:"Qwen3 30B · RASTHOR·IA Cloud",managed:true,canConnect:false},200,origin);
+        return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false},200,origin);
       }
       return json({ok:true,service:"RASTHOR·IA Cloud DM",model:MODEL},200,origin);
     }
 
     if (url.pathname === "/api/connection" && (request.method === "POST" || request.method === "DELETE")) {
-      return json({connected:true,model:"Qwen3 30B · RASTHOR·IA Cloud",managed:true,canConnect:false},200,origin);
+      return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false},200,origin);
     }
 
     if (request.method === "POST" && url.pathname === "/api/random-campaign") {
@@ -443,17 +491,16 @@ Preferencias actuales: ${JSON.stringify(prefs).slice(0,2500)}
 
 Devuelve solo el JSON solicitado.`;
       try {
-        const result = await env.AI.run(MODEL, {
-          messages: [
+        const parsed = await runStructured(env,{
+          messages:[
             {role:"system",content:"Eres un diseñador de campañas de rol extremadamente versátil. No asumas fantasía medieval."},
             {role:"user",content:prompt}
           ],
-          response_format: { type:"json_schema", json_schema:RANDOM_CAMPAIGN_SCHEMA },
-          max_tokens: 900,
-          temperature: 1.0,
-          top_p: 0.96
+          schema:RANDOM_CAMPAIGN_SCHEMA,
+          max_tokens:720,
+          temperature:0.82,
+          top_p:0.94
         });
-        const parsed = modelResponseObject(result);
         if (!parsed) return json({error:"El Director no pudo construir una idea válida."},502,origin);
         return json({campaign:{
           premise:clip(parsed.premise,3500),
@@ -513,17 +560,16 @@ priority debe contener STR, DEX, CON, INT, WIS y CHA ordenadas desde la caracter
 Si la historia es realista, no inventes magia. ancestry debe respetar lo escrito por el usuario; solo sugiere algo si estaba genérico. background puede ampliar brevemente el concepto sin decidir eventos importantes por el jugador.
 Devuelve solo el JSON solicitado.`;
       try {
-        const result = await env.AI.run(MODEL, {
-          messages: [
+        const parsed = await runStructured(env,{
+          messages:[
             {role:"system",content:"Eres un diseñador de personajes d20 que adapta mecánicas a cualquier género sin imponer fantasía medieval."},
             {role:"user",content:prompt}
           ],
-          response_format: { type:"json_schema", json_schema:CHARACTER_BUILD_SCHEMA },
-          max_tokens: 650,
-          temperature: 0.55,
-          top_p: 0.9
+          schema:CHARACTER_BUILD_SCHEMA,
+          max_tokens:480,
+          temperature:0.45,
+          top_p:0.88
         });
-        const parsed = modelResponseObject(result);
         if (!parsed) return json({error:"El Director no pudo preparar una ficha válida."},502,origin);
         const abilities=["STR","DEX","CON","INT","WIS","CHA"];
         const priority=[];
@@ -558,25 +604,21 @@ Devuelve solo el JSON solicitado.`;
     const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
 
     try {
-      const result = await env.AI.run(MODEL, {
-        messages: [
-          { role:"system", content:SYSTEM },
-          { role:"user", content:userPrompt },
+      const parsed = await runStructured(env,{
+        messages:[
+          {role:"system",content:SYSTEM},
+          {role:"user",content:userPrompt},
         ],
-        response_format: { type:"json_schema", json_schema: RESPONSE_SCHEMA },
-        max_tokens: 1800,
-        temperature: 0.72,
-        top_p: 0.9,
-        repetition_penalty: 1.08,
+        schema:RESPONSE_SCHEMA,
+        max_tokens:900,
+        temperature:0.52,
+        top_p:0.88
       });
-
-      const parsed = modelResponseObject(result);
-      if (!parsed) return json({error:"El Director IA devolvió una respuesta no válida."},502,origin);
       const response = normalizeResponse(parsed,campaign);
       return json({response,vault:response.privateMemory},200,origin);
     } catch (error) {
       console.error("RASTHOR·IA Workers AI error",error);
-      return json({error:"El Director IA está temporalmente ocupado. Reintenta en unos segundos."},503,origin);
+      return json({error:"El Director IA no pudo completar este turno. Tu acción sigue guardada: pulsa Continuar narración para reintentar."},503,origin);
     }
   }
 };
