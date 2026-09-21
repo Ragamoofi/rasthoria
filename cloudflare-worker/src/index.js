@@ -320,6 +320,7 @@ AUTORIDAD
 
 TIRADAS
 - Pide check solo cuando exista incertidumbre significativa y el resultado importe.
+- Preguntas de estado como "¿qué llevo?", "¿qué tengo encima?", "¿dónde estoy?", "¿qué hora es?", "¿cómo estoy?" o consultas equivalentes NUNCA requieren check ni save: responde usando el estado recibido.
 - No pidas tiradas para acciones triviales, información obvia ni decisiones puramente narrativas.
 - skill debe corresponder a ability. Las salvaciones usan skill=null.
 - DC orientativa: 8 fácil, 10 normal, 12 moderada, 15 difícil, 18 muy difícil, 20+ excepcional.
@@ -408,13 +409,33 @@ function sanitizeEffects(effects,campaign) {
   return (Array.isArray(effects)?effects:[]).filter(e=>validEffect(e,campaign)).slice(0,10);
 }
 
+const SKILL_ABILITY = {
+  athletics:"STR",
+  acrobatics:"DEX", sleight:"DEX", stealth:"DEX",
+  arcana:"INT", history:"INT", investigation:"INT", nature:"INT", religion:"INT",
+  animal:"WIS", insight:"WIS", medicine:"WIS", perception:"WIS", survival:"WIS",
+  deception:"CHA", intimidation:"CHA", performance:"CHA", persuasion:"CHA",
+};
+
 function sanitizeCheck(check,campaign) {
   if (!check || typeof check!=="object") return null;
-  return {
-    ...check,
-    success:sanitizeEffects(check.success,campaign).slice(0,8),
-    failure:sanitizeEffects(check.failure,campaign).slice(0,8)
-  };
+  const clean={...check};
+  if (clean.kind==="save") {
+    // Las salvaciones jamás usan habilidad. Corrige silenciosamente la salida del LLM.
+    clean.skill=null;
+  } else if (clean.kind==="check") {
+    if (clean.skill && SKILL_ABILITY[clean.skill]) {
+      // La habilidad manda: corrige automáticamente la característica si el modelo se equivocó.
+      clean.ability=SKILL_ABILITY[clean.skill];
+    }
+  } else {
+    return null;
+  }
+  clean.success=sanitizeEffects(clean.success,campaign).slice(0,8);
+  clean.failure=sanitizeEffects(clean.failure,campaign).slice(0,8);
+  clean.dc=Math.max(5,Math.min(30,Number(clean.dc)||10));
+  clean.advantage=["normal","advantage","disadvantage"].includes(clean.advantage)?clean.advantage:"normal";
+  return clean;
 }
 
 function sanitizeCombatIntent(intent,campaign) {
@@ -431,6 +452,41 @@ function sanitizeCombatIntent(intent,campaign) {
   return intent;
 }
 
+function sanitizeEntities(entities,campaign) {
+  const existing=new Map((campaign?.memory?.entities||[]).map(e=>[e.id,e]));
+  return (Array.isArray(entities)?entities:[]).filter(e=>{
+    if(!e||typeof e!=="object") return false;
+    const id=String(e.id||"").trim();
+    const name=String(e.name||"").trim();
+    if(!id||!name||["__proto__","constructor","prototype"].includes(id)) return false;
+    const old=existing.get(id);
+    if(old?.status==="muerto" && e.status!=="muerto") return false;
+    return true;
+  }).slice(0,20).map(e=>({
+    ...e,
+    id:clip(e.id,100),
+    name:clip(e.name,100),
+    description:clip(e.description,1800),
+    status:clip(e.status,100),
+    relation:Math.max(-100,Math.min(100,Number(e.relation)||0)),
+  }));
+}
+
+function sanitizeEncounter(encounter,campaign) {
+  if (!Array.isArray(encounter)) return null;
+  const clean=encounter.filter(e=>e&&typeof e==="object"&&String(e.name||"").trim())
+    .slice(0,6)
+    .map(e=>({
+      ...e,
+      name:clip(e.name,90),
+      tactic:clip(e.tactic,200),
+      distance:Math.max(0,Math.min(60,Number(e.distance)||0)),
+      entityId:e.entityId?clip(e.entityId,100):null,
+    }));
+  if(!clean.some(e=>e.side==="enemy")) return null;
+  return clean;
+}
+
 function normalizeResponse(raw, campaign) {
   const currentSummary = clip(campaign?.memory?.summary, 8000);
   const currentVault = clip(campaign?.gmVault, 14000);
@@ -444,11 +500,11 @@ function normalizeResponse(raw, campaign) {
     })) : [],
     check: sanitizeCheck(r.check,campaign),
     effects: sanitizeEffects(r.effects,campaign),
-    encounter: Array.isArray(r.encounter) ? r.encounter.slice(0,6) : null,
+    encounter: sanitizeEncounter(r.encounter,campaign),
     combatIntent: sanitizeCombatIntent(r.combatIntent,campaign),
     memory: {
       summary: typeof r.memory?.summary === "string" ? clip(r.memory.summary,8000) : currentSummary,
-      entities: Array.isArray(r.memory?.entities) ? r.memory.entities.slice(0,20) : [],
+      entities: sanitizeEntities(r.memory?.entities,campaign),
       decision: typeof r.memory?.decision === "string" ? clip(r.memory.decision,700) : null,
       flags: Array.isArray(r.memory?.flags) ? r.memory.flags.slice(0,20) : [],
       elapsedMinutes: Number.isInteger(r.memory?.elapsedMinutes) ? Math.max(0,Math.min(1440,r.memory.elapsedMinutes)) : 0,
