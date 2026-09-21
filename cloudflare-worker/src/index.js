@@ -44,6 +44,47 @@ const CHECK_SCHEMA = {
   required: ["kind","ability","skill","dc","advantage","reason","success","failure","damage"],
 };
 
+const CHARACTER_BUILD_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    classId: { type: "string", enum: ["warrior","rogue","mage","cleric"] },
+    priority: {
+      type: "array",
+      minItems: 6,
+      maxItems: 6,
+      items: { type: "string", enum: ["STR","DEX","CON","INT","WIS","CHA"] }
+    },
+    ancestry: { type: "string", maxLength: 100 },
+    background: { type: "string", maxLength: 900 },
+    languages: { type: "array", maxItems: 5, items: { type: "string", maxLength: 50 } },
+    reason: { type: "string", maxLength: 500 }
+  },
+  required: ["classId","priority","ancestry","background","languages","reason"]
+};
+
+const RANDOM_CAMPAIGN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    premise: { type: "string", maxLength: 3500 },
+    genre: { type: "string", maxLength: 100 },
+    setting: { type: "string", maxLength: 180 },
+    era: { type: "string", maxLength: 100 },
+    tone: { type: "string", maxLength: 120 },
+    fantasy: { type: "string", maxLength: 80 },
+    combat: { type: "integer", minimum: 0, maximum: 5 },
+    exploration: { type: "integer", minimum: 0, maximum: 5 },
+    conversation: { type: "integer", minimum: 0, maximum: 5 },
+    mystery: { type: "integer", minimum: 0, maximum: 5 },
+    difficulty: { type: "string", enum: ["amable","equilibrada","exigente"] },
+    mortality: { type: "string", enum: ["permanente","consecuencias"] },
+    duration: { type: "string", maxLength: 100 },
+    themes: { type: "string", maxLength: 1000 }
+  },
+  required: ["premise","genre","setting","era","tone","fantasy","combat","exploration","conversation","mystery","difficulty","mortality","duration","themes"]
+};
+
 const RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -261,7 +302,14 @@ function publicCampaign(campaign) {
 const SYSTEM = `Eres el Director de Juego de RASTHOR·IA, un RPG narrativo reactivo inspirado en d20/SRD 5e. Tu respuesta NO es texto libre: debe cumplir exactamente el JSON solicitado.
 
 OBJETIVO
-Crear una campaña viva, coherente, impredecible y con consecuencias persistentes. El usuario puede proponer cualquier género y premisa. Adáptate sin imponer fantasía medieval si no corresponde.
+Crear una campaña viva, coherente, impredecible y con consecuencias persistentes. El usuario puede proponer LITERALMENTE cualquier género, época, universo o escala: vida cotidiana, drama, deportes, crimen, terror, western, histórico, cyberpunk, ciencia ficción, superhéroes, romance, fantasía o mezclas propias. Adáptate sin imponer fantasía medieval si no corresponde.
+
+ADAPTACIÓN DE GÉNERO
+- Las cuatro clases del motor son SOLO bases mecánicas. Combatiente, Especialista, Canalizador y Protector pueden representar profesiones, entrenamiento, tecnología, mutaciones, poderes, magia, medicina, liderazgo u otras explicaciones según el mundo.
+- El catálogo de armas, protecciones, curación y suministros es una abstracción mecánica. En la narración dales una apariencia coherente con la ambientación.
+- En el primer turno, si el equipo genérico no encaja, usa item_rename para darle nombres apropiados al mundo sin alterar sus estadísticas.
+- Una campaña realista puede no tener magia. Una campaña contemporánea no debe introducir espadas, tabernas, reinos o hechizos salvo que la premisa los pida.
+- No toda historia necesita salvar el mundo. Respeta campañas íntimas, sociales, deportivas, románticas, profesionales o de investigación.
 
 AUTORIDAD
 - El jugador controla SOLO a su personaje: acciones, palabras, intenciones y decisiones.
@@ -369,6 +417,131 @@ export default {
 
     if (url.pathname === "/api/connection" && (request.method === "POST" || request.method === "DELETE")) {
       return json({connected:true,model:"Qwen3 30B · RASTHOR·IA Cloud",managed:true,canConnect:false},200,origin);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/random-campaign") {
+      let body = {};
+      try { body = await request.json(); } catch {}
+      const seed = clip(body?.seed, 1200);
+      const prefs = body?.preferences && typeof body.preferences === "object" ? body.preferences : {};
+      const randomToken = crypto.randomUUID();
+      const prompt = `Inventa UNA premisa nueva y jugable para RASTHOR·IA.
+
+Puede ser absolutamente cualquier género, época y escala. No favorezcas fantasía medieval. Alterna entre historias realistas y extraordinarias: noir, vida cotidiana, deportes, música, romance, crimen, western, guerra, espionaje, horror, ciencia ficción, cyberpunk, superhéroes, supervivencia, histórico, piratas, mitología, comedia o híbridos inesperados.
+
+La premisa debe:
+- empezar con un gancho concreto y dejar mucha libertad al jugador;
+- evitar profecías del elegido y clichés obligatorios salvo que sean una elección creativa deliberada;
+- incluir suficiente conflicto para una campaña reactiva;
+- no decidir la profesión del personaje salvo que el usuario ya la haya sugerido;
+- poder jugarse con un motor d20 aunque no exista combate;
+- variar de escala: no siempre salvar el mundo.
+
+Semilla de variedad: ${randomToken}
+Idea escrita por el usuario, si existe: ${seed || "ninguna"}
+Preferencias actuales: ${JSON.stringify(prefs).slice(0,2500)}
+
+Devuelve solo el JSON solicitado.`;
+      try {
+        const result = await env.AI.run(MODEL, {
+          messages: [
+            {role:"system",content:"Eres un diseñador de campañas de rol extremadamente versátil. No asumas fantasía medieval."},
+            {role:"user",content:prompt}
+          ],
+          response_format: { type:"json_schema", json_schema:RANDOM_CAMPAIGN_SCHEMA },
+          max_tokens: 900,
+          temperature: 1.0,
+          top_p: 0.96
+        });
+        const parsed = modelResponseObject(result);
+        if (!parsed) return json({error:"El Director no pudo construir una idea válida."},502,origin);
+        return json({campaign:{
+          premise:clip(parsed.premise,3500),
+          genre:clip(parsed.genre,100),
+          setting:clip(parsed.setting,180),
+          era:clip(parsed.era,100),
+          tone:clip(parsed.tone,120),
+          fantasy:clip(parsed.fantasy,80),
+          combat:Math.max(0,Math.min(5,Number(parsed.combat)||0)),
+          exploration:Math.max(0,Math.min(5,Number(parsed.exploration)||0)),
+          conversation:Math.max(0,Math.min(5,Number(parsed.conversation)||0)),
+          mystery:Math.max(0,Math.min(5,Number(parsed.mystery)||0)),
+          difficulty:["amable","equilibrada","exigente"].includes(parsed.difficulty)?parsed.difficulty:"equilibrada",
+          mortality:["permanente","consecuencias"].includes(parsed.mortality)?parsed.mortality:"consecuencias",
+          duration:clip(parsed.duration,100)||"Campaña abierta",
+          themes:clip(parsed.themes,1000)
+        }},200,origin);
+      } catch (error) {
+        console.error("RASTHOR·IA random campaign error",error);
+        return json({error:"El Director no pudo inventar una campaña ahora. Prueba otra vez."},503,origin);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/character-build") {
+      let body = {};
+      try { body = await request.json(); } catch { return json({error:"Datos de personaje no válidos."},400,origin); }
+      const concept = clip(body?.concept, 200);
+      const premise = clip(body?.premise, 5000);
+      const ancestry = clip(body?.ancestry, 100);
+      const background = clip(body?.background, 1800);
+      const config = body?.config && typeof body.config === "object" ? body.config : {};
+      const prompt = `Diseña la base mecánica de este protagonista según lo que el jugador dijo que será.
+
+MUNDO/PREMISA:
+${premise || "El mundo todavía es abierto."}
+
+CONFIGURACIÓN:
+${JSON.stringify(config).slice(0,2500)}
+
+CONCEPTO DEL PERSONAJE:
+${concept || "No especificado; infiere una opción versátil sin imponer una profesión."}
+
+ORIGEN/ESPECIE ESCRITO:
+${ancestry || "no especificado"}
+
+PASADO ESCRITO:
+${background || "no especificado"}
+
+El motor tiene cuatro bases MECÁNICAS, no profesiones medievales:
+- warrior = Combatiente: resistencia, fuerza, combate físico, aguante.
+- rogue = Especialista: destreza, sigilo, investigación, técnica, precisión.
+- mage = Canalizador: poder especial, tecnología avanzada, psiónica, mutación, magia o intelecto ofensivo.
+- cleric = Protector: medicina, apoyo, liderazgo, defensa, recuperación.
+
+Elige classId por cómo funcionaría el personaje, no por estética.
+priority debe contener STR, DEX, CON, INT, WIS y CHA ordenadas desde la característica más importante a la menos importante. El juego asignará 15,14,13,12,10,8 en ese orden.
+Si la historia es realista, no inventes magia. ancestry debe respetar lo escrito por el usuario; solo sugiere algo si estaba genérico. background puede ampliar brevemente el concepto sin decidir eventos importantes por el jugador.
+Devuelve solo el JSON solicitado.`;
+      try {
+        const result = await env.AI.run(MODEL, {
+          messages: [
+            {role:"system",content:"Eres un diseñador de personajes d20 que adapta mecánicas a cualquier género sin imponer fantasía medieval."},
+            {role:"user",content:prompt}
+          ],
+          response_format: { type:"json_schema", json_schema:CHARACTER_BUILD_SCHEMA },
+          max_tokens: 650,
+          temperature: 0.55,
+          top_p: 0.9
+        });
+        const parsed = modelResponseObject(result);
+        if (!parsed) return json({error:"El Director no pudo preparar una ficha válida."},502,origin);
+        const abilities=["STR","DEX","CON","INT","WIS","CHA"];
+        const priority=[];
+        for(const a of Array.isArray(parsed.priority)?parsed.priority:[]) if(abilities.includes(a)&&!priority.includes(a)) priority.push(a);
+        for(const a of abilities) if(!priority.includes(a)) priority.push(a);
+        const classId=["warrior","rogue","mage","cleric"].includes(parsed.classId)?parsed.classId:"rogue";
+        return json({build:{
+          classId,
+          priority:priority.slice(0,6),
+          ancestry:clip(parsed.ancestry,100)||ancestry||"Humano",
+          background:clip(parsed.background,900),
+          languages:Array.isArray(parsed.languages)?parsed.languages.slice(0,5).map(x=>clip(x,50)).filter(Boolean):[],
+          reason:clip(parsed.reason,500)
+        }},200,origin);
+      } catch(error) {
+        console.error("RASTHOR·IA character build error",error);
+        return json({error:"El Director no pudo preparar tu ficha ahora. Puedes repartir las características manualmente o al azar."},503,origin);
+      }
     }
 
     if (request.method !== "POST" || url.pathname !== "/api/gm") return json({error:"Not found"},404,origin);
