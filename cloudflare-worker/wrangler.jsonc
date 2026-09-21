@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rasthoria-cloud-dm",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-21",
+  "ai": {
+    "binding": "AI"
+  }
+}
