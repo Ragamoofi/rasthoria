@@ -334,6 +334,10 @@ COMBATE
 
 EFECTOS
 - Usa solo efectos mecánicos válidos: item_add, item_remove, item_rename, currency, xp, condition_add, condition_remove, wound.
+- wound SOLO puede tener target="player". Nunca uses wound para NPC, enemigos ni aliados.
+- condition_add/condition_remove fuera de combate SOLO pueden apuntar a "player". En combate pueden apuntar a "player" o al id exacto de un actor activo.
+- item_remove/item_rename solo pueden apuntar a un objeto que realmente exista en el inventario actual.
+- Si el jugador intenta herir o matar a un NPC capaz de resistirse y todavía no hay combate, normalmente inicia un encounter en vez de aplicar wound o declarar la muerte directamente.
 - No uses efectos para cosas que pueden quedar solo narrativas.
 - XP fuera de combate debe ser moderada y justificada.
 
@@ -359,6 +363,53 @@ MEMORIA
 CONTINUIDAD
 Respeta nombres, relaciones, heridas, recursos, lugares, secretos y decisiones ya establecidos. Los NPC tienen objetivos propios, pueden mentir, negarse, huir, negociar, traicionar, perdonar o cambiar según lo ocurrido. No reveles conocimiento que el personaje no puede tener.`;
 
+function validEffect(effect,campaign) {
+  if (!effect || typeof effect !== "object") return false;
+  const type=effect.type;
+  const character=campaign?.character || {};
+  const inventory=Array.isArray(character.inventory)?character.inventory:[];
+  const actors=Array.isArray(campaign?.combat?.actors)?campaign.combat.actors:[];
+  if (type==="wound") return effect.target==="player";
+  if (type==="condition_add" || type==="condition_remove") {
+    if (effect.target==="player") return true;
+    return actors.some(a=>a?.id===effect.target);
+  }
+  if (type==="item_remove" || type==="item_rename") {
+    return inventory.some(i=>i?.id===effect.target || i?.catalog===effect.target || i?.name===effect.target);
+  }
+  if (type==="item_add") return Number.isInteger(effect.amount) && effect.amount>=1 && effect.amount<=20 && !!String(effect.target||"").trim();
+  if (type==="currency") return Number.isInteger(effect.amount) && Math.abs(effect.amount)<=1000 && Number(character.gold||0)+effect.amount>=0;
+  if (type==="xp") return Number.isInteger(effect.amount) && effect.amount>=0 && effect.amount<=500;
+  return false;
+}
+
+function sanitizeEffects(effects,campaign) {
+  return (Array.isArray(effects)?effects:[]).filter(e=>validEffect(e,campaign)).slice(0,10);
+}
+
+function sanitizeCheck(check,campaign) {
+  if (!check || typeof check!=="object") return null;
+  return {
+    ...check,
+    success:sanitizeEffects(check.success,campaign).slice(0,8),
+    failure:sanitizeEffects(check.failure,campaign).slice(0,8)
+  };
+}
+
+function sanitizeCombatIntent(intent,campaign) {
+  if (!intent || typeof intent!=="object" || !campaign?.combat) return null;
+  const combat=campaign.combat;
+  const currentId=combat.order?.[combat.index]?.id;
+  if (!currentId || currentId==="player" || intent.actor!==currentId) return null;
+  const actor=combat.actors?.find(a=>a.id===intent.actor);
+  if (!actor || actor.hp<=0) return null;
+  if (intent.action==="attack") {
+    const validTargets=["player",...(combat.actors||[]).filter(a=>a.id!==actor.id&&a.hp>0).map(a=>a.id)];
+    if (!validTargets.includes(intent.target)) return null;
+  }
+  return intent;
+}
+
 function normalizeResponse(raw, campaign) {
   const currentSummary = clip(campaign?.memory?.summary, 8000);
   const currentVault = clip(campaign?.gmVault, 14000);
@@ -370,10 +421,10 @@ function normalizeResponse(raw, campaign) {
       speaker: clip(x.speaker,80),
       text: clip(x.text,3500),
     })) : [],
-    check: r.check ?? null,
-    effects: Array.isArray(r.effects) ? r.effects.slice(0,10) : [],
+    check: sanitizeCheck(r.check,campaign),
+    effects: sanitizeEffects(r.effects,campaign),
     encounter: Array.isArray(r.encounter) ? r.encounter.slice(0,6) : null,
-    combatIntent: r.combatIntent ?? null,
+    combatIntent: sanitizeCombatIntent(r.combatIntent,campaign),
     memory: {
       summary: typeof r.memory?.summary === "string" ? clip(r.memory.summary,8000) : currentSummary,
       entities: Array.isArray(r.memory?.entities) ? r.memory.entities.slice(0,20) : [],
@@ -385,6 +436,15 @@ function normalizeResponse(raw, campaign) {
     safeRest: Boolean(r.safeRest),
     privateMemory: typeof r.privateMemory === "string" ? clip(r.privateMemory,14000) : currentVault,
   };
+  if (out.encounter?.length) {
+    out.effects=[];
+    out.check=null;
+    out.combatIntent=null;
+  }
+  if (out.check) {
+    out.effects=[];
+    out.encounter=null;
+  }
   if (!out.narrative.length) out.narrative=[{kind:"narrator",speaker:"",text:"El mundo guarda silencio un instante, pero la situación permanece abierta. ¿Qué haces?"}];
   return out;
 }
