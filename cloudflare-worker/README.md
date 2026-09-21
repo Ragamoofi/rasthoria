@@ -1,27 +1,22 @@
 # RASTHOR·IA Cloud DM
 
-Backend de prueba para RASTHOR·IA usando **Cloudflare Workers AI** y el modelo **Qwen3 30B-A3B**.
+Backend del Director de Juego para RASTHOR·IA usando Cloudflare Workers AI y Qwen3 30B-A3B.
 
-## Despliegue rápido
+## Cloudflare
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Ragamoofi/rasthoria/tree/main/cloudflare-worker)
+- Root directory: `cloudflare-worker`
+- Build command: vacío
+- Deploy command: `npm run deploy`
+- Worker name: `rasthoria-cloud-dm`
 
-Cloudflare detectará automáticamente el binding `AI` definido en `wrangler.jsonc`.
+El Worker expone:
 
-Cuando termine el despliegue, copia la URL del Worker, que será parecida a:
+- `GET /health`
+- `GET /api/connection`
+- `POST /api/gm`
 
-`https://rasthoria-cloud-dm.<tu-subdominio>.workers.dev`
-
-Prueba primero:
-
-`https://TU-WORKER.workers.dev/health`
-
-Debe responder con un JSON que incluya `"ok": true`.
-
-## Conectar RASTHOR·IA para la prueba
-
-Abre RASTHOR·IA con:
+Después del primer deploy, abre una vez el juego con:
 
 `https://ragamoofi.github.io/rasthoria/?api=https://TU-WORKER.workers.dev`
 
-RASTHOR·IA guardará ese endpoint en el navegador y empezará a usar la IA en la nube sin descargar modelos locales.
+El endpoint queda guardado localmente y el parámetro `api` desaparece de la URL.
