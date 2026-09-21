@@ -382,6 +382,11 @@ MEMORIA
 - location cambia solo cuando realmente cambia la ubicación.
 - privateMemory contiene secretos del Director, planes, verdades ocultas, identidades secretas y consecuencias todavía no reveladas. Conserva secretos previos y añade solo lo necesario. No reveles privateMemory en narrative.
 
+CONSULTAS DE ESTADO
+- Si lastEvent es una consulta sobre inventario, equipo, ubicación, hora, estado físico o información evidente ya presente en el estado, responde de forma natural usando esos datos y devuelve check=null, encounter=null, combatIntent=null y effects=[].
+- Nunca conviertas una pregunta informativa simple en una tirada.
+- Si falta un dato, dilo narrativamente sin inventar una prueba solo para obtenerlo.
+
 CONTINUIDAD
 Respeta nombres, relaciones, heridas, recursos, lugares, secretos y decisiones ya establecidos. Los NPC tienen objetivos propios, pueden mentir, negarse, huir, negociar, traicionar, perdonar o cambiar según lo ocurrido. No reveles conocimiento que el personaje no puede tener.`;
 
@@ -738,6 +743,7 @@ Devuelve solo el JSON solicitado.`;
     try { body = await request.json(); } catch { return json({error:"Invalid JSON"},400,origin); }
     const campaign = body?.campaign;
     if (!campaign || typeof campaign !== "object") return json({error:"Missing campaign"},400,origin);
+    const repairHint = clip(body?.repairHint, 700);
 
     const compact = publicCampaign(campaign);
     const isOpening = Number(compact.revision||0) <= 1 && (compact.messages?.length||0) <= 3;
@@ -745,7 +751,11 @@ Devuelve solo el JSON solicitado.`;
       ? "ESTE ES EL INICIO DE LA CAMPAÑA. Construye una apertura evocadora y cinematográfica siguiendo estrictamente APERTURA DE CAMPAÑA. Prioriza atmósfera, lugar, humanidad y un gancho que ocurra en escena."
       : "CONTINÚA LA ESCENA. Mantén el mismo nivel de calidad literaria, continuidad, espacialidad y voz de personajes. Reacciona exactamente a lo que acaba de hacer o decir el personaje.";
 
-    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
+    const repairDirective = repairHint
+      ? `\n\nCORRECCIÓN DEL INTENTO ANTERIOR\nLa respuesta previa no encajó con el motor por este motivo: ${repairHint}. Corrige ese problema sin repetir el error ni cambiar hechos ya establecidos.`
+      : "";
+
+    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
 
     try {
       const parsed = await runStructured(env,{
