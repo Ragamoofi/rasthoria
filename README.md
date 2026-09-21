@@ -16,3 +16,12 @@ La interfaz y el motor principal fueron recuperados desde la versión original d
 Los jugadores no necesitan iniciar sesión en ChatGPT, pegar una API key, activar WebGPU ni descargar modelos.
 
 RASTHOR·IA es un proyecto completamente independiente de PokéSenda.
+
+
+## Director IA en la nube
+
+Worker de producción:
+
+`https://rasthoria-cloud-dm.o-sariego.workers.dev`
+
+RASTHOR·IA usa este servicio automáticamente. Los jugadores no necesitan cuenta, clave API, descargar modelos ni activar aceleración gráfica.
