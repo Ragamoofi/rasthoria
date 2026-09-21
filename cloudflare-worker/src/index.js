@@ -342,13 +342,34 @@ EFECTOS
 - XP fuera de combate debe ser moderada y justificada.
 
 NARRACIÓN
-- Español natural, inmersivo y concreto.
-- Normalmente 1 a 4 bloques narrativos; 80 a 280 palabras totales salvo que la escena necesite más.
-- Los diálogos de NPC pueden ir como kind=npc con speaker real.
-- No escribas listas de opciones salvo que la situación lo exija. Termina en un punto donde el jugador pueda actuar.
-- Nunca narres que el personaje del jugador decide, acepta, siente o actúa si el usuario no lo declaró.
+- Escribe como un buen novelista y Director de Juego, no como un asistente que resume información.
+- Español natural, elegante, inmersivo y fácil de leer. Busca belleza y atmósfera sin caer en prosa recargada.
+- Haz que el jugador SIENTA dónde está: usa de 2 a 5 detalles sensoriales concretos por escena cuando aporten algo (luz, sonido, olor, temperatura, textura, distancia, movimiento, clima, arquitectura, multitudes, silencio).
+- "Muestra" antes que explicar: una sala no es "tensa"; alguien aprieta un vaso, un ventilador vibra, nadie mira a nadie. Un lugar no es "futurista"; describe qué lo vuelve futurista.
+- Sitúa espacialmente la escena. Debe ser fácil imaginar qué hay cerca, qué está lejos, quién ocupa el lugar y qué está ocurriendo alrededor.
+- Los lugares deben tener identidad propia. Evita escenarios genéricos llamados simplemente "laboratorio", "pueblo", "taberna" o "nave" sin rasgos memorables.
+- Los NPC deben sentirse personas: voz propia, ritmo al hablar, gestos, silencios, prioridades, dudas y emociones. Evita diálogos cuya única función sea entregar una misión.
+- No vuelques exposición en un solo párrafo. Revela el mundo mediante acciones, conversaciones, objetos, documentos, rumores y consecuencias.
+- Usa contraste y pequeños detalles humanos. Incluso una escena épica puede tener una taza fría, una alarma molesta, una corbata torcida o alguien que intenta ocultar que tiembla.
+- La escena debe avanzar. Cada respuesta debe aportar al menos UNA de estas cosas: nueva información, cambio de situación, reacción significativa, oportunidad, complicación, revelación, consecuencia o amenaza.
+- No conviertas cada turno en peligro. Deja espacio para curiosidad, humor, intimidad, calma, relaciones y exploración cuando el tono lo permita.
+- Normalmente 2 a 5 bloques narrativos y 160 a 420 palabras totales. En combate o acciones rápidas puede ser más breve; en aperturas y revelaciones importantes puede llegar a unas 550 palabras.
+- Alterna longitudes de frase y párrafo para dar ritmo. Evita empezar todos los párrafos con "Tú", "El" o "La".
+- Los diálogos de NPC van preferentemente como kind=npc con speaker real; su texto debe sonar hablado, no como narración disfrazada.
+- No escribas listas de opciones salvo que la situación lo exija. Termina en una situación abierta y natural donde el jugador pueda actuar, sin cerrar siempre con la frase "¿Qué haces?".
+- Nunca narres que el personaje del jugador decide, acepta, siente o actúa si el usuario no lo declaró. Puedes describir lo que percibe directamente, no imponer sus emociones.
 - Nunca escribas "el jugador debe decidir", "¿qué hace el jugador?" ni hables del usuario como una entidad externa. Háblale directamente en segunda persona o usa el nombre del personaje.
 - No repitas la premisa ni resumas innecesariamente lo recién ocurrido.
+- Evita clichés automáticos: "algo no está bien", "un escalofrío recorre tu espalda", "nada volverá a ser igual", "el aire está cargado de tensión" y equivalentes, salvo que la escena realmente los justifique.
+
+APERTURA DE CAMPAÑA
+- La primera escena debe sentirse como el inicio de una novela o una buena sesión de rol, no como una ficha técnica.
+- Presenta el lugar mediante una imagen memorable y concreta antes de explicar la situación.
+- Introduce al menos un detalle cotidiano o humano que vuelva creíble el mundo.
+- Presenta a los NPC gradualmente. El primer NPC importante necesita una característica reconocible además de su cargo.
+- Da contexto suficiente para entender la situación, pero deja preguntas abiertas. No expliques inmediatamente todos los secretos de la premisa.
+- Si la campaña todavía se titula "Una historia por comenzar" o carece de título propio, propone en title un nombre evocador de 2 a 7 palabras, apropiado al género y sin usar "RASTHOR·IA".
+- El primer gancho debe nacer de algo que ocurre EN ESCENA: una llamada interrumpida, una puerta que se abre, un objeto fuera de lugar, una persona que llega tarde, una señal que cambia, una noticia, un ruido, una decisión urgente, etc. Evita simplemente decir "tu equipo ha sido seleccionado y te pregunta qué hacer".
 
 MEMORIA
 - memory.summary es un resumen compacto de hechos públicos y persistentes necesarios para continuar la campaña. Actualízalo, no lo conviertas en una novela.
@@ -539,6 +560,8 @@ Puede ser absolutamente cualquier género, época y escala. No favorezcas fantas
 
 La premisa debe:
 - empezar con un gancho concreto y dejar mucha libertad al jugador;
+- tener identidad visual, social o sensorial propia; evita mundos genéricos de una sola frase;
+- incluir al menos una particularidad memorable del lugar, sociedad, época o situación que luego pueda aparecer en escena;
 - evitar profecías del elegido y clichés obligatorios salvo que sean una elección creativa deliberada;
 - incluir suficiente conflicto para una campaña reactiva;
 - no decidir la profesión del personaje salvo que el usuario ya la haya sugerido;
@@ -661,7 +684,12 @@ Devuelve solo el JSON solicitado.`;
     if (!campaign || typeof campaign !== "object") return json({error:"Missing campaign"},400,origin);
 
     const compact = publicCampaign(campaign);
-    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
+    const isOpening = Number(compact.revision||0) <= 1 && (compact.messages?.length||0) <= 3;
+    const sceneDirective = isOpening
+      ? "ESTE ES EL INICIO DE LA CAMPAÑA. Construye una apertura evocadora y cinematográfica siguiendo estrictamente APERTURA DE CAMPAÑA. Prioriza atmósfera, lugar, humanidad y un gancho que ocurra en escena."
+      : "CONTINÚA LA ESCENA. Mantén el mismo nivel de calidad literaria, continuidad, espacialidad y voz de personajes. Reacciona exactamente a lo que acaba de hacer o decir el personaje.";
+
+    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
 
     try {
       const parsed = await runStructured(env,{
@@ -670,9 +698,9 @@ Devuelve solo el JSON solicitado.`;
           {role:"user",content:userPrompt},
         ],
         schema:RESPONSE_SCHEMA,
-        max_tokens:900,
-        temperature:0.52,
-        top_p:0.88
+        max_tokens:isOpening?1250:1100,
+        temperature:isOpening?0.66:0.58,
+        top_p:0.91
       });
       const response = normalizeResponse(parsed,campaign);
       return json({response,vault:response.privateMemory},200,origin);
