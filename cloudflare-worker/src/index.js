@@ -328,6 +328,10 @@ TIRADAS
 
 COMBATE
 - Solo crea encounter cuando la situación realmente inicia combate. Debe incluir al menos un enemy.
+- REGLA CRÍTICA: si el jugador declara que intenta apuñalar, cortar, disparar, golpear, decapitar, matar o herir deliberadamente a un NPC consciente/capaz de reaccionar y todavía no existe combate, NO puedes decidir que el golpe impacta ni que el NPC muere. Debes narrar únicamente el inicio del intento y crear encounter para que el motor resuelva iniciativa y ataques con dados.
+- Frases del jugador como "le corto la cabeza", "lo mato", "le disparo entre los ojos" o similares son INTENCIONES, no resultados garantizados.
+- Nunca conviertas una descripción contundente escrita por el jugador en éxito automático. El jugador declara lo que intenta; los dados deciden si lo consigue.
+- Si el objetivo está inequívocamente indefenso/inconsciente y eso ya está establecido en el estado, puedes resolverlo narrativamente cuando no exista incertidumbre. No inventes indefensión para evitar los dados.
 - Los perfiles válidos son brute, skirmisher, ranged, guardian y minion.
 - Si ya hay combate y el turno pertenece a un actor que no es player, usa combatIntent con attack, dodge o flee. No pidas check para ese turno.
 - combatIntent.actor debe ser EXACTAMENTE el id del actor cuyo turno muestra combat.order; target debe ser EXACTAMENTE player o el id de otro actor válido.
@@ -490,6 +494,43 @@ function sanitizeEncounter(encounter,campaign) {
     }));
   if(!clean.some(e=>e.side==="enemy")) return null;
   return clean;
+}
+
+function plainText(value) {
+  return String(value||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+}
+
+function declaredAction(campaign) {
+  const event=String(campaign?.lastEvent||"");
+  const match=event.match(/^ACCIÓN DECLARADA:\s*([\s\S]*)$/i);
+  return (match?.[1]||"").trim();
+}
+
+function isHostileDeclaration(campaign) {
+  if (campaign?.combat) return false;
+  const action=plainText(declaredAction(campaign));
+  if (!action) return false;
+  const hostile=/\b(mato|matar|matand|asesin|apuñal|acuchill|degoll|decapit|corto la cabeza|cortar la cabeza|le corto|lo corto|dispar|tiro a matar|golpeo|pego|ataco|embisto|estrangul|ahorc|rompo el cuello|atravies|clavo (?:la|el|mi)|hiero|herir)\b/i.test(action);
+  const harmless=/\b(mato el tiempo|me mata de risa|muerto de risa)\b/i.test(action);
+  return hostile && !harmless;
+}
+
+function narrativeClaimsResolvedViolence(narrative) {
+  const text=plainText((Array.isArray(narrative)?narrative:[]).map(x=>x?.text||"").join(" "));
+  return /\b(le cortas la cabeza|cortas su cabeza|su cabeza cae|cae su cabeza|lo decapitas|la decapitas|lo matas|la matas|muere al instante|cae muerto|cae muerta|lo atraviesas|la atraviesas|tu (?:katana|espada|cuchillo|bala|golpe) (?:le )?(?:corta|atraviesa|impacta)|impacta de lleno)\b/i.test(text);
+}
+
+function semanticProblem(response,campaign) {
+  if (!response || campaign?.combat) return "";
+  if (isHostileDeclaration(campaign)) {
+    if (!response.encounter?.length && !response.check) {
+      return "El jugador declaró un ataque deliberado contra un personaje, pero la respuesta resolvió la escena sin abrir combate ni pedir una resolución del motor.";
+    }
+    if (narrativeClaimsResolvedViolence(response.narrative)) {
+      return "La narración dio por exitoso un ataque del jugador antes de que el motor resolviera iniciativa/ataque/daño.";
+    }
+  }
+  return "";
 }
 
 function normalizeResponse(raw, campaign) {
@@ -747,18 +788,23 @@ Devuelve solo el JSON solicitado.`;
 
     const compact = publicCampaign(campaign);
     const isOpening = Number(compact.revision||0) <= 1 && (compact.messages?.length||0) <= 3;
+    const hostileTurn = isHostileDeclaration(campaign);
     const sceneDirective = isOpening
       ? "ESTE ES EL INICIO DE LA CAMPAÑA. Construye una apertura evocadora y cinematográfica siguiendo estrictamente APERTURA DE CAMPAÑA. Prioriza atmósfera, lugar, humanidad y un gancho que ocurra en escena."
       : "CONTINÚA LA ESCENA. Mantén el mismo nivel de calidad literaria, continuidad, espacialidad y voz de personajes. Reacciona exactamente a lo que acaba de hacer o decir el personaje.";
+
+    const hostilityDirective = hostileTurn
+      ? "\n\nACCIÓN HOSTIL DETECTADA\nEl jugador ha declarado un INTENTO de violencia. Si el objetivo puede reaccionar y aún no hay combate, está TERMINANTEMENTE PROHIBIDO narrar que el ataque impacta, hiere, decapita o mata. Narra solo el inicio del movimiento/reacción del mundo y devuelve encounter con al menos un enemy para que el motor lance iniciativa. La redacción del jugador describe intención, NO éxito automático."
+      : "";
 
     const repairDirective = repairHint
       ? `\n\nCORRECCIÓN DEL INTENTO ANTERIOR\nLa respuesta previa no encajó con el motor por este motivo: ${repairHint}. Corrige ese problema sin repetir el error ni cambiar hechos ya establecidos.`
       : "";
 
-    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
+    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${hostilityDirective}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
 
     try {
-      const parsed = await runStructured(env,{
+      let parsed = await runStructured(env,{
         messages:[
           {role:"system",content:SYSTEM},
           {role:"user",content:userPrompt},
@@ -768,7 +814,25 @@ Devuelve solo el JSON solicitado.`;
         temperature:isOpening?0.66:0.58,
         top_p:0.91
       });
-      const response = normalizeResponse(parsed,campaign);
+      let response = normalizeResponse(parsed,campaign);
+      const semanticIssue = semanticProblem(response,campaign);
+      if (semanticIssue) {
+        console.warn("RASTHOR·IA semantic repair:",semanticIssue);
+        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno. No otorgues éxito automático a una acción hostil. Si el objetivo puede reaccionar y no hay combate, encounter DEBE contener al menos un adversario y la narración debe detenerse ANTES del impacto para que los dados decidan.`;
+        parsed = await runStructured(env,{
+          messages:[
+            {role:"system",content:SYSTEM},
+            {role:"user",content:repairPrompt},
+          ],
+          schema:RESPONSE_SCHEMA,
+          max_tokens:1050,
+          temperature:0.35,
+          top_p:0.86
+        });
+        response = normalizeResponse(parsed,campaign);
+        const secondIssue=semanticProblem(response,campaign);
+        if(secondIssue) throw new Error("SEMANTIC_RULE_FAILURE: "+secondIssue);
+      }
       return json({response,vault:response.privateMemory},200,origin);
     } catch (error) {
       console.error("RASTHOR·IA Workers AI error",error);
