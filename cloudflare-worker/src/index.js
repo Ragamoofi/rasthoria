@@ -1,5 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-21-rules-v8-audit";
+const BUILD = "2026-09-22-rules-v9-dice-lock";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -200,8 +200,24 @@ function json(data, status = 200, origin = "") {
   });
 }
 
+const MOJIBAKE_REPLACEMENTS = [
+  ["√°","á"],["√©","é"],["√≠","í"],["√≥","ó"],["√∫","ú"],["√±","ñ"],
+  ["√Å","Á"],["√â","É"],["√ç","Í"],["√ì","Ó"],["√ö","Ú"],["√ë","Ñ"],
+  ["√º","ü"],["√ú","Ü"],["¬ø","¿"],["¬°","¡"],
+  ["Ã¡","á"],["Ã©","é"],["Ã­","í"],["Ã³","ó"],["Ãº","ú"],["Ã±","ñ"],
+  ["Ã","Á"],["Ã‰","É"],["Ã","Í"],["Ã“","Ó"],["Ãš","Ú"],["Ã‘","Ñ"],
+  ["Ã¼","ü"],["Ãœ","Ü"],["Â¿","¿"],["Â¡","¡"],["Â·","·"],
+  ["â€¦","…"],["â€”","—"],["â€“","–"],["â€œ","“"],["â€","”"],["â€™","’"]
+];
+
+function repairMojibake(value) {
+  let text=String(value ?? "");
+  for (const [bad,good] of MOJIBAKE_REPLACEMENTS) text=text.split(bad).join(good);
+  return text;
+}
+
 function clip(value, max) {
-  return String(value ?? "").slice(0, max);
+  return repairMojibake(value).slice(0, max);
 }
 
 function clipContext(value,max) {
@@ -368,23 +384,25 @@ AUTORIDAD
 - No inventes una tirada ya realizada ni cambies su resultado.
 - Si el motor informa éxito, narra éxito; si informa fracaso, narra fracaso y sus consecuencias.
 
-TIRADAS — REGLA CENTRAL D20 / SRD 5e
-- Los dados son la autoridad cuando el personaje INTENTA conseguir algo y el resultado es incierto. No decidas por narración un éxito o fracaso que debería resolver el d20.
-- PRESUNCIÓN A FAVOR DE TIRAR: si una acción razonablemente podría fallar Y ese fallo cambiaría la escena, pide check o save. Esto debe ocurrir con frecuencia; exploración, investigación, sigilo, interacción social con resistencia, persecuciones, obstáculos físicos, tareas técnicas bajo presión y peligros deben usar dados.
-- Usa ability check cuando el personaje actúa para superar una dificultad: Fuerza/Atletismo para esfuerzo físico, Destreza/Acrobacias o Sigilo para precisión/movimiento oculto, Inteligencia/Investigación y conocimientos para deducir o estudiar, Sabiduría/Percepción-Perspicacia-Supervivencia para percibir o leer situaciones, Carisma/Engaño-Intimidación-Persuasión-Interpretación para influir en otros.
+TIRADAS — REGLA CENTRAL D20 / RASTHOR·IA
+- RASTHOR·IA usa una variante deliberadamente MÁS cargada de dados que una mesa estándar de D&D: toda acción o decisión del personaje declarada dentro del mundo y que haga avanzar la ficción debe desembocar en al menos una tirada antes de que cierres sus consecuencias.
+- La tirada base para resolver si una acción sale bien, mal o con complicaciones es SIEMPRE un D20 Test: ability check, saving throw o attack roll. El tipo de acción NO cambia el tamaño del dado de resolución. Los D4/D6/D8/D10/D12 se reservan para daño, curación, recursos o efectos que explícitamente los usen.
+- No resuelvas por pura narración una acción del jugador y luego sigas adelante. Primero describe solo el intento, preparación o tensión; devuelve check; el motor bloqueará la historia hasta que el jugador tire.
+- Para acciones sencillas que en D&D normal quizá no pedirían prueba, la tirada puede decidir la CALIDAD, COSTE, TIEMPO, INFORMACIÓN, EXPOSICIÓN o COMPLICACIÓN, en vez de impedir absurdamente la acción básica. Ejemplo: "entro al club" puede ocurrir, pero un check de Percepción/Perspicacia decide qué detecta al entrar; "busco munición" requiere Investigación y solo después se determina si encuentra algo y a qué coste.
+- Si el jugador escribe varias acciones en un mismo mensaje, resuelve primero la primera acción significativa que requiera tirada y detente. No encadenes resultados de varias acciones antes del dado.
+- EXCEPCIÓN: consultas puramente informativas o de estado como "¿qué llevo?", "¿qué tengo encima?", "¿dónde estoy?", "¿qué hora es?", "¿cómo estoy?" o equivalentes no requieren tirada porque no son una acción del personaje que avance la ficción.
+- EXCEPCIÓN: una declaración hostil que inicia combate no usa un ability check previo; crea encounter y deja que el motor obligue iniciativa, ataque y daño con sus dados correspondientes.
+- Usa ability check cuando el personaje actúa: Fuerza/Atletismo para esfuerzo físico, Destreza/Acrobacias o Sigilo para precisión/movimiento oculto, Inteligencia/Investigación y conocimientos para deducir, buscar o estudiar, Sabiduría/Percepción-Perspicacia-Supervivencia para percibir o leer situaciones, Carisma/Engaño-Intimidación-Persuasión-Interpretación para influir en otros.
 - Usa save cuando el personaje REACCIONA o RESISTE un peligro/efecto que ya le está ocurriendo: explosión, veneno, caída, miedo, derrumbe, trampa, etc. Las salvaciones usan skill=null.
-- Conversar normalmente, preguntar algo, elegir entre caminos, caminar sin peligro, abrir una puerta normal, recoger un objeto visible o consultar información evidente NO requieren tirada. La ELECCIÓN no se tira; se tira el intento incierto que nace de ella.
-- Tampoco tires si no existe ninguna consecuencia por fallar y el personaje puede repetir indefinidamente sin coste, riesgo ni presión.
-- Interacciones sociales: no tires por decir "hola" o hacer una pregunta normal. Sí tira si el jugador intenta convencer a alguien que se resiste, mentir, intimidar, manipular, negociar algo importante, ocultar intenciones o conseguir una concesión incierta.
-- Información oculta: si el jugador busca pistas, trampas, compartimentos, personas escondidas, mentiras o detalles que no son obvios, normalmente requiere Percepción, Investigación o Perspicacia.
-- Sigilo/oposición: esconderse, infiltrarse, robar, seguir a alguien sin ser visto, escapar de vigilancia o realizar una maniobra contra oposición requieren tirada cuando exista posibilidad real de ser descubierto o impedido.
-- Obstáculos y riesgo: forzar, romper, escalar, saltar, nadar, equilibrarse, perseguir, huir, conducir bajo peligro, desactivar, hackear, reparar o improvisar bajo presión requieren tirada cuando el resultado no sea seguro.
-- DC orientativa SRD/5e: 5 muy fácil (normalmente ni tires), 10 fácil, 15 moderada, 20 difícil, 25 muy difícil, 30 casi imposible. Ajusta por contexto; evita DC arbitrarias para castigar al jugador.
+- Información oculta, buscar objetos o recursos, registrar un lugar, seguir pistas, escuchar detrás de una puerta, leer intenciones o detectar peligros deben usar Percepción, Investigación o Perspicacia según corresponda.
+- Sigilo, infiltración, robo, persecución, obstáculos físicos, tareas técnicas, conducción bajo presión, negociación, mentira, intimidación y cualquier intento con oposición requieren D20.
+- Incluso una acción social aparentemente simple debe tirar si con ella avanza la escena: el D20 puede medir primera impresión, lectura del interlocutor, calidad de la interacción o complicaciones, sin obligar a convertir un saludo en algo absurdo.
+- DC orientativa: 5 muy fácil, 10 fácil, 15 moderada, 20 difícil, 25 muy difícil, 30 casi imposible. En la regla de RASTHOR·IA puedes usar DC 5 para acciones muy sencillas cuya tirada mide calidad o complicación.
 - Ventaja/desventaja se usa por circunstancias claras del mundo, preparación, ayuda, posición, condiciones o herramientas; no para manipular el resultado deseado.
 - skill debe corresponder a ability. Si ninguna habilidad aplica, usa skill=null con la característica correcta.
-- Preguntas de estado como "¿qué llevo?", "¿qué tengo encima?", "¿dónde estoy?", "¿qué hora es?", "¿cómo estoy?" o consultas equivalentes NUNCA requieren check ni save: responde usando el estado recibido.
-- Si solicitas check, detén la narración ANTES de saber si funciona: effects debe estar vacío y encounter debe ser null; las consecuencias mecánicas van en success/failure y la historia continuará después del resultado.
-- Un fracaso no tiene por qué bloquear la aventura. Cuando sea apropiado, aplica fallo con consecuencia: pérdida de tiempo, ruido, sospecha, posición peor, recurso gastado, información incompleta, peligro nuevo o una complicación coherente.
+- Si solicitas check, detén la narración ANTES de saber si funciona: effects debe estar vacío salvo item_rename y encounter debe ser null; las consecuencias mecánicas van en success/failure y la historia continuará después del resultado.
+- Un fracaso no tiene por qué bloquear la aventura. Favorece fallo con consecuencia cuando sea apropiado: pérdida de tiempo, ruido, sospecha, posición peor, recurso gastado, información incompleta, oportunidad perdida o peligro nuevo.
+- REGLA DE BLOQUEO: jamás continúes la ficción más allá de una acción declarada si esa acción debía generar tirada y todavía no existe resultado del motor.
 
 COMBATE
 - Solo crea encounter cuando la situación realmente inicia combate. Debe incluir al menos un enemy.
@@ -730,14 +748,11 @@ function isInformationalOrTrivialDeclaration(campaign) {
   const action=plainText(declaredAction(campaign)).trim();
   if (!action) return true;
 
-  // Consultas de estado o acciones sin incertidumbre relevante.
-  const informational=/^(?:que|qué|cual|cuál|cuanto|cuánto|donde|dónde|como|cómo|tengo|llevo|mi inventario|inventario|estado|hora)\b/.test(action)
+  // Solo consultas puramente informativas quedan fuera del bloqueo de dados.
+  // Las acciones "triviales" dentro del mundo también tiran en RASTHOR·IA:
+  // el dado mide calidad, información, tiempo, exposición o complicación.
+  return /^(?:que|qué|cual|cuál|cuanto|cuánto|donde|dónde|como|cómo|tengo|llevo|mi inventario|inventario|estado|hora)\b/.test(action)
     || /\b(que llevo|que tengo|donde estoy|que hora|como estoy|mi inventario|reviso (?:mi )?(?:inventario|mochila|equipo))\b/.test(action);
-  if (informational) return true;
-
-  const trivial=/\b(saludo|digo hola|me siento|me levanto|miro mi (?:mano|ropa|equipo)|camino hacia|voy hacia|entro por la puerta abierta|abro la puerta(?: normal)?|cierro la puerta|recojo|agarro|tomo el objeto visible|bebo agua|como |duermo|descanso)\b/.test(action);
-  const pressure=/\b(rapido|rápido|antes de|sin que|a escondidas|sigilo|cerrad|bloquead|trabada|forzar|peligro|persec|mientras|bajo fuego|contra reloj|vigil|guardia|trampa|ocult|resiste|se niega)\b/.test(action);
-  return trivial && !pressure;
 }
 
 function actionLikelyNeedsD20(campaign) {
@@ -745,16 +760,9 @@ function actionLikelyNeedsD20(campaign) {
   const action=plainText(declaredAction(campaign)).trim();
   if (!action || isInformationalOrTrivialDeclaration(campaign) || isHostileDeclaration(campaign)) return false;
 
-  // Acciones que en una mesa d20 normalmente se resuelven con prueba si existe oposición,
-  // información oculta, peligro, presión o una consecuencia clara por fallar.
-  const social=/\b(convenz|convenc|persuad|persuadir|mient|mentir|engañ|engan|intimid|amenaz|negoci|manipul|seduc|distraig|distraer|me hago pasar|finjo)\b/.test(action);
-  const hidden=/\b(investig|busco (?:pistas|una pista|algo ocult|huellas|pruebas|trampas|un compartimento)|registro|examino|inspeccion|escucho|percib|detecto|rastre|sigo (?:sus|las|los) huellas|leo sus intenciones|averigu|descifro)\b/.test(action);
-  const stealth=/\b(escond|sigilo|infiltr|me cuelo|robo|hurt|carter|sigo (?:a|al|la) .*sin|sin que me vean|sin ser visto|paso desapercib|escapo de la vigilancia)\b/.test(action);
-  const physical=/\b(forz|romp|derrib|trep|escal|salto|saltar|nado|nadar|equilibr|cruzo .*pelig|corro para|persigo|huyo|huir|escapo|esquiv|maniobr|empujo|levanto .*pesad|aguanto|resisto)\b/.test(action);
-  const technical=/\b(hack|pirate|desactiv|desarmo|reparo|reparar|improvis|manipulo (?:la|el) cerradura|ganzu|abro .*cerrad|descifro|program|sabote|falsific|oper[oa] .*bajo|conduzco|piloto)\b/.test(action);
-  const uncertainty=/\b(intento|trato de|pruebo a|quiero lograr|a ver si|sin que|antes de que|bajo presion|bajo presión|contra reloj|arriesgo|dificil|difícil|peligro|ocult|cerrad|bloquead|vigil|resiste|opone)\b/.test(action);
-
-  return social || hidden || stealth || physical || technical || uncertainty;
+  // Regla Dice-First de RASTHOR·IA: toda acción declarada en el mundo
+  // que avance la ficción debe generar una tirada antes de resolverse.
+  return true;
 }
 
 function combatPlayerActionLikelyNeedsD20(campaign) {
@@ -763,14 +771,12 @@ function combatPlayerActionLikelyNeedsD20(campaign) {
   if (currentId!=="player") return false;
   const action=plainText(declaredAction(campaign)).trim();
   if (!action) return false;
-  // Ataques normales deben resolverlos el motor de combate del cliente, no un ability check.
+
+  // Ataques normales los resuelve el motor con attack roll + damage roll.
   if (/\b(dispar|ataco|golpeo|pego|apunal|acuchill|degoll|decapit|mato|matar|hiero|herir|embisto|estrangul|corto con|clavo)\b/.test(action)) return false;
-  const social=/\b(convenz|convenc|persuad|mient|mentir|engan|intimid|amenaz|negoci|manipul|distraig|distraer|provoc|asust|hacer que se rinda|se rinda)\b/.test(action);
-  const stealth=/\b(escond|sigilo|me ocult|paso desapercib|sin que me vean|sin ser visto|escabull)\b/.test(action);
-  const physical=/\b(empujo|derrib|romp|trep|escal|salto|saltar|equilibr|maniobr|levanto .*pesad|tiro .*encima|arrojo .*encima|bloqueo .*puerta|forz)\b/.test(action);
-  const technical=/\b(hack|desactiv|desarmo|reparo|improvis|manipulo|sabote|program|cierro .*mecan|abro .*mecan)\b/.test(action);
-  const uncertainty=/\b(intento|trato de|pruebo a|a ver si|sin que|antes de que|bajo presion|contra reloj|arriesgo)\b/.test(action);
-  return social || stealth || physical || technical || uncertainty;
+
+  // Cualquier otra maniobra creativa que llegó al Director requiere D20.
+  return true;
 }
 
 function semanticProblem(response,campaign) {
@@ -802,10 +808,10 @@ function semanticProblem(response,campaign) {
     return "La narración resolvió el éxito o fracaso de una prueba antes de lanzar el d20. Debe detenerse en el intento, tensión o preparación previa.";
   }
   if (actionLikelyNeedsD20(campaign) && !response.check && !response.encounter?.length) {
-    return "La acción declarada tiene incertidumbre, oposición, información oculta, riesgo o una consecuencia significativa por fallar. Debe resolverse con una prueba d20 antes de narrar el resultado.";
+    return "Regla Dice-First: toda acción del personaje que avance la ficción debe generar una prueba D20 antes de resolver sus consecuencias. Devuelve check y detén la narración antes del resultado.";
   }
   if (isInformationalOrTrivialDeclaration(campaign) && response.check) {
-    return "La acción es informativa o trivial y no justifica una tirada. Resuélvela directamente sin check.";
+    return "La entrada es una consulta puramente informativa de estado y no justifica una tirada. Responde usando el estado recibido.";
   }
 
   const generic=genericInventoryItems(campaign);
@@ -1090,7 +1096,7 @@ Devuelve solo el JSON solicitado.`;
       : "";
 
     const d20Directive = d20Turn
-      ? "\n\nRESOLUCIÓN D20 OBLIGATORIA\nLa acción declarada contiene una incertidumbre significativa. Debes devolver check con la característica/habilidad, DC y ventaja/desventaja apropiadas. Narra solamente la preparación, intento o tensión previa; NO narres todavía si funcionó. El motor hará la tirada y después volverás a recibir el resultado para narrar la consecuencia."
+      ? "\n\nRESOLUCIÓN D20 OBLIGATORIA — DICE-FIRST\nRASTHOR·IA exige una tirada para toda acción del personaje que avance la ficción. Debes devolver check con la característica/habilidad, DC y ventaja/desventaja apropiadas. Si la acción básica es sencilla, usa el D20 para medir calidad, información, coste, tiempo, exposición o complicación. Narra solamente preparación, intento o tensión previa; NO narres todavía el resultado. El motor bloqueará el avance hasta que el jugador tire."
       : "";
 
     const inventoryDirective = genericItems.length
@@ -1118,7 +1124,7 @@ Devuelve solo el JSON solicitado.`;
       const semanticIssue = semanticProblem(response,campaign);
       if (semanticIssue) {
         console.warn("RASTHOR·IA semantic repair:",semanticIssue);
-        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno respetando el sistema d20. Si es una acción incierta no hostil, devuelve check y detén la narración antes de conocer el resultado. Si es un ataque contra alguien capaz de reaccionar y no hay combate, encounter DEBE contener al menos un adversario. Si la acción es trivial o meramente informativa, NO pidas tirada.`;
+        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno respetando la regla Dice-First. Toda acción no hostil del personaje que avance la ficción DEBE devolver check y detener la narración antes del resultado, aunque en una mesa estándar pareciera sencilla; usa DC baja y deja que el dado mida calidad o complicación. Si es un ataque contra alguien capaz de reaccionar y no hay combate, encounter DEBE contener al menos un adversario. Solo las consultas puramente informativas de estado quedan sin tirada.`;
         parsed = await runStructured(env,{
           messages:[
             {role:"system",content:SYSTEM},
