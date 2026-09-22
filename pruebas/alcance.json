@@ -1,0 +1,25 @@
+{
+  "modified": [
+    "assets/dice-arena.js",
+    "assets/dice-arena.css",
+    "DADOS_LAB.html",
+    "index.html"
+  ],
+  "identical": [
+    "cloudflare-worker/src/index.js",
+    "cloudflare-worker/README.md",
+    "cloudflare-worker/wrangler.jsonc",
+    "cloudflare-worker/package.json",
+    "assets/vendor/three-global-0.160.1.min.js",
+    "assets/vendor/THREE-LICENSE.txt",
+    "LEEME_DADOS_V2.txt",
+    "README.md",
+    ".nojekyll"
+  ],
+  "embedded_engine_sha256": [
+    "5db5ba82eef00d1dee7e86e663098c9427d01183a88d357437daff295aec3e75",
+    "939d0fabebb3b2f01753bb866b067d8d3384fb06da19f0e6557609d3b1a9f4f7",
+    "73cee3df4cdae680c255eeb4d1175b9790ab5e31b029fffabbb07e319557a416"
+  ],
+  "index_only_dice_tags": true
+}

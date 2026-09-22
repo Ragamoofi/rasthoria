@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RASTHOR·IA · Laboratorio de Dados</title>
-<link rel="stylesheet" href="./assets/dice-arena.css?v=2">
+<link rel="stylesheet" href="./assets/dice-arena.css?v=3">
 <style>
 html,body{min-height:100%;margin:0;background:#0d0d10;color:#eee;font-family:Inter,system-ui,sans-serif}
 body{display:grid;place-items:center;background:radial-gradient(circle at 50% 20%,#231b17,#0b0b0e 55%)}
@@ -15,22 +15,33 @@ h1{font-family:Georgia,serif;font-weight:500;color:#f3ddbd;letter-spacing:.05em;
 <body>
 <main>
   <h1>RASTHOR·IA · Laboratorio de Dados</h1>
-  <p class="muted">Prueba el sistema visual sin entrar a una campaña. Cada botón fuerza el resultado indicado para verificar que el número queda físicamente arriba.</p>
+  <p class="muted">Prueba el sistema visual sin entrar a una campaña. Pruebas aisladas de física y lectura. En el D4, el resultado se lee junto a la punta superior.</p>
   <div class="card"><h2>Dados base</h2><div class="row">
     <button class="diebtn" data-d="4">D4</button><button class="diebtn" data-d="6">D6</button><button class="diebtn" data-d="8">D8</button><button class="diebtn" data-d="10">D10</button><button class="diebtn" data-d="12">D12</button><button class="diebtn" data-d="20">D20</button><button class="diebtn" data-d="100">D100</button>
   </div></div>
   <div class="grid">
     <div class="card"><h2>Momentos importantes</h2><div class="row"><button class="special" id="crit">D20 · 20 natural</button><button class="special" id="fumble">D20 · 1 natural</button></div></div>
-    <div class="card"><h2>Ventaja / varios dados</h2><div class="row"><button class="special" id="adv">Ventaja D20</button><button class="special" id="multi">4D6 + 3</button></div></div>
+    <div class="card"><h2>Ventaja / varios dados</h2><div class="row"><button class="special" id="adv">Ventaja D20</button><button class="special" id="dis">Desventaja D20</button><button class="special" id="two">2D12</button><button class="special" id="multi">4D6 + 3</button></div></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h2>Valor exacto y prueba consecutiva</h2>
+    <div class="row"><label>Dado <select id="exact-die"><option>4</option><option>6</option><option>8</option><option>10</option><option>12</option><option selected>20</option><option>100</option></select></label>
+    <button class="special" id="min">Resultado 1</button><button class="special" id="max">Resultado máximo</button><button class="special" id="sequence">Tres tiradas seguidas</button></div>
+    <p id="lab-status" class="muted" role="status" style="margin:10px 0 0">El juego recibe el mismo resultado que entregó antes de la animación.</p>
   </div>
 </main>
 <script src="./assets/vendor/three-global-0.160.1.min.js"></script>
-<script src="./assets/dice-arena.js?v=2"></script>
+<script src="./assets/vendor/cannon-es-0.20.0.js"></script>
+<script src="./assets/dice-arena.js?v=3"></script>
 <script>
 for(const b of document.querySelectorAll('[data-d]')) b.onclick=()=>{const d=+b.dataset.d; RASTHORIA_DICE.test(d,d===100?73:Math.ceil(d*.7),1)};
 document.querySelector('#crit').onclick=()=>RASTHORIA_DICE.test(20,20,1,5);
 document.querySelector('#fumble').onclick=()=>RASTHORIA_DICE.test(20,1,1,5);
 document.querySelector('#adv').onclick=()=>RASTHORIA_DICE.roll({sides:20,count:1,values:[7,18],kept:[18],modifier:3,total:21,natural:18,advantage:'advantage',purpose:'Prueba de ventaja',success:true,critical:false,dc:15});
+document.querySelector('#dis').onclick=()=>RASTHORIA_DICE.roll({sides:20,count:1,values:[19,2],kept:[2],modifier:3,total:5,natural:2,advantage:'disadvantage',purpose:'Prueba de desventaja'});
+document.querySelector('#two').onclick=()=>RASTHORIA_DICE.roll({sides:12,count:2,values:[1,12],kept:[1,12],modifier:0,total:13,purpose:'Dos dados'});
+document.querySelector('#min').onclick=()=>RASTHORIA_DICE.test(+document.querySelector('#exact-die').value,1);
+document.querySelector('#max').onclick=()=>{const d=+document.querySelector('#exact-die').value;return RASTHORIA_DICE.test(d,d)};
+document.querySelector('#sequence').onclick=async()=>{for(const d of [6,12,20])await RASTHORIA_DICE.test(d,d);document.querySelector('#lab-status').textContent='Tres tiradas completadas, sin bloqueo.'};
 document.querySelector('#multi').onclick=()=>RASTHORIA_DICE.roll({sides:6,count:4,values:[6,3,5,2],kept:[6,3,5,2],modifier:3,total:19,natural:null,advantage:'normal',purpose:'Daño de prueba',success:null,critical:false,dc:null});
 setTimeout(()=>{if(location.hash==='#auto20')document.querySelector('#crit').click();if(location.hash==='#auto100')document.querySelector('[data-d=\"100\"]').click();if(location.hash==='#autoadv')document.querySelector('#adv').click();},250);
 </script>

@@ -1,0 +1,35 @@
+RASTHOR·IA — DADOS FÍSICOS V3
+
+INSTALACIÓN EN TU PROYECTO DE GITHUB DESKTOP
+1. Descomprime este ZIP.
+2. Copia el contenido de RASTHORIA_DADOS_FISICOS_V3 dentro de la carpeta de tu repositorio RASTHORIA y acepta reemplazar los archivos.
+3. Conserva la carpeta .git que ya existe en tu repositorio. Este ZIP no la reemplaza.
+4. Abre index.html para jugar o DADOS_LAB.html para probar únicamente los dados.
+5. Cuando quieras subirlo, haz Commit y Push desde GitHub Desktop.
+
+No necesitas instalar Node, compilar ni descargar dependencias para jugar.
+Three.js y Cannon están incluidos localmente.
+Base utilizada: RASTHORIA_DADOS_V2_GITHUB_DESKTOP.zip.
+
+CAMBIOS
+- assets/dice-arena.js: física, mallas con biseles, números sobre caras, reproducción, sonido suave y fallback.
+- assets/dice-arena.css: exclusivamente la presentación de la bandeja de dados.
+- index.html: únicamente etiquetas de carga de dados, incluida Cannon y versión de caché.
+- DADOS_LAB.html: pruebas manuales de tipos, mínimos, máximos, ventaja, desventaja y tiradas consecutivas.
+- assets/vendor/cannon-es-0.20.0.js y CANNON-LICENSE.txt: nueva dependencia local.
+
+El resto del proyecto se incluye sin modificaciones. El Director, el motor de reglas, el RNG criptográfico, combate, narrativa, inventario y guardados conservan sus bytes originales.
+
+CÓMO SE RESPETA EL RESULTADO
+El motor entrega primero los valores. Cannon precalcula una trayectoria con cuerpos convexos, gravedad, fricción, rebote, amortiguación y paredes. Antes del primer fotograma se orienta la malla numerada mediante una simetría del dado para que el valor solicitado quede en la posición final correcta. La forma física es la misma bajo esa simetría.
+Después se reproduce esa trayectoria. Las cifras permanecen pegadas a sus caras durante toda la tirada; nunca se cambian al terminar. La pequeña corrección final, cuando es necesaria, asienta la cara física más cercana, no elige el valor. Se valida que el eje de lectura termine arriba.
+
+La tirada dura 1,45–2,35 segundos, con 0,8 segundos posteriores para leerla. Al detenerse no hay bucle de renderizado permanente. Movimiento reducido muestra directamente la posición estable.
+
+D4: un tetraedro real tiene una punta superior, no una cara horizontal superior. Se utiliza la numeración tradicional que repite el valor junto a esa punta en tres caras.
+D100: decenas y unidades en dos D10; 00 + 0 representa 100.
+Ventaja/desventaja: ambos D20; aro en la mesa para el conservado y menor brillo en el descartado. Los empates conservan visualmente el primer dado.
+
+El botón Sonido permite silenciar los impactos y recuerda esa preferencia. Si WebGL no está disponible o se pierde, se muestra el resultado textual y se libera la partida.
+
+Consulta PRUEBAS_DADOS_V3.md para el detalle de validación.

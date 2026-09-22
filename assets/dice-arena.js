@@ -1,182 +1,123 @@
-/* RASTHOR·IA Dice Arena v2.0
- * Cinematic deterministic dice renderer.
- * Visual only: the game engine remains the authority for RNG and rules.
+/* RASTHOR·IA Dice Arena 3.0 — presentation only.
+ * Local Three.js 0.160.1 + cannon-es 0.20.0. No game state/RNG access.
+ * Simulate first, orient the numbered shell by a polyhedron symmetry, then replay.
+ * The result is supplied by the caller; physical randomness never chooses it.
  */
-(function(){
+(function () {
   'use strict';
+  const T = window.THREE, C = window.CANNON, VERSION = '3.0.0';
+  const DT = 1 / 120, UP = T && new T.Vector3(0, 1, 0);
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  // Separate visual PRNG. Game dice use their unchanged crypto rejection sampler.
+  let seed = (Date.now() ^ 0x9e3779b9) >>> 0;
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); seed = a[0] || seed; } catch (_) {}
+  function random() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; }
+  let muted = false;
+  try { muted = localStorage.getItem('rasthoria-dice-muted') === '1'; } catch (_) {}
+  let overlay, stage, caption, status, fallback, sound, renderer, scene, camera, tray;
+  let audio, lastImpact = 0, queue = Promise.resolve(), active = null, lost = false;
+  let lastReport = null, frameCount = 0;
+  const textures = new Map(), shapes = new Map(), inFlight = new WeakMap();
+  const v = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
 
-  const VERSION='2.0.0';
-  const MAX_VISUAL_DICE=12;
-  const REDUCED=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches||false;
-  const T=window.THREE;
-  const delay=(ms)=>new Promise(r=>setTimeout(r,ms));
-
-  function fallbackAPI(){
-    window.RASTHORIA_DICE={
-      ready:false,version:VERSION,
-      async roll(){await delay(900)},
-      async test(sides=20,value=20,count=1){await delay(900);return {sides,value,count}}
-    };
-  }
-  if(!T||!T.WebGLRenderer){fallbackAPI();return}
-
-  let renderer,scene,camera,floor,tableBorder,keyLight,rimLight,ambientLight;
-  let overlay,canvasWrap,titleEl,notationEl,resultEl,resultMain,resultDetail,soundButton;
-  let queue=Promise.resolve();
-  let muted=localStorage.getItem('rasthoria-dice-muted')==='1';
-  let audioCtx=null,lastImpactAt=0;
-  const labelTextureCache=new Map();
-
-  const V3=()=>new T.Vector3();
-  const UP=new T.Vector3(0,1,0);
-  const ZP=new T.Vector3(0,0,1);
-
-  function createDOM(){
-    overlay=document.createElement('div');
-    overlay.id='ras-dice-arena';
-    overlay.setAttribute('aria-hidden','true');
-    overlay.innerHTML=`
-      <div class="ras-dice-canvas-wrap"></div>
-      <div class="ras-dice-hud">
-        <div class="ras-dice-kicker">RASTHOR·IA · EL DESTINO SE TIRA</div>
-        <h2 class="ras-dice-title">Tirada</h2>
-        <div class="ras-dice-notation">D20</div>
-      </div>
-      <div class="ras-dice-stage-spacer"></div>
-      <div class="ras-dice-result-wrap">
-        <div class="ras-dice-result" role="status" aria-live="polite">
-          <div class="ras-dice-result-main"></div>
-          <div class="ras-dice-result-detail"></div>
-        </div>
-      </div>
-      <button class="ras-dice-sound" type="button" aria-label="Activar o silenciar sonido de dados" title="Sonido de dados">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M11 5 6.7 8.5H3.8v7h2.9L11 19V5Z"></path>
-          <path class="ras-sound-wave" d="M15 8.2a5 5 0 0 1 0 7.6"></path>
-          <path class="ras-sound-wave" d="M17.8 5.8a8.4 8.4 0 0 1 0 12.4"></path>
-          <path class="ras-sound-slash" d="m15.3 9 5 5"></path>
-          <path class="ras-sound-slash" d="m20.3 9-5 5"></path>
-        </svg>
-      </button>`;
+  function createDOM() {
+    overlay = document.createElement('section');
+    overlay.id = 'ras-dice-arena';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = `<div class="ras-dice-table" role="dialog" aria-modal="true" aria-label="Mesa de dados">
+      <header class="ras-dice-heading"><span class="ras-dice-kicker">RASTHOR·IA · MESA DE ROL</span><h2 class="ras-dice-title">Tirada</h2><p class="ras-dice-notation"></p></header>
+      <div class="ras-dice-canvas-wrap" aria-hidden="true"></div>
+      <div class="ras-dice-fallback" hidden></div>
+      <footer class="ras-dice-footer"><p class="ras-dice-status" role="status" aria-live="polite"></p><button type="button" class="ras-dice-sound" aria-label="Silenciar dados">Sonido</button></footer>
+    </div>`;
     document.body.appendChild(overlay);
-    canvasWrap=overlay.querySelector('.ras-dice-canvas-wrap');
-    titleEl=overlay.querySelector('.ras-dice-title');
-    notationEl=overlay.querySelector('.ras-dice-notation');
-    resultEl=overlay.querySelector('.ras-dice-result');
-    resultMain=overlay.querySelector('.ras-dice-result-main');
-    resultDetail=overlay.querySelector('.ras-dice-result-detail');
-    soundButton=overlay.querySelector('.ras-dice-sound');
-    soundButton.classList.toggle('is-muted',muted);
-    soundButton.addEventListener('click',()=>{
-      muted=!muted;
-      localStorage.setItem('rasthoria-dice-muted',muted?'1':'0');
-      soundButton.classList.toggle('is-muted',muted);
-      if(!muted) playImpact(.42,true);
-    });
+    stage = overlay.querySelector('.ras-dice-canvas-wrap');
+    caption = overlay.querySelector('.ras-dice-notation');
+    status = overlay.querySelector('.ras-dice-status');
+    fallback = overlay.querySelector('.ras-dice-fallback');
+    sound = overlay.querySelector('.ras-dice-sound');
+    sound.onclick = () => setMuted(!muted);
+    setMuted(muted);
   }
-
-  function initScene(){
-    try{
-      renderer=new T.WebGLRenderer({alpha:true,antialias:true,powerPreference:'high-performance'});
-    }catch(err){console.warn('RASTHOR·IA Dice: WebGL unavailable',err);fallbackAPI();return false}
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,matchMedia('(max-width:700px)').matches?1.25:1.6));
-    renderer.shadowMap.enabled=true;
-    renderer.shadowMap.type=T.PCFSoftShadowMap;
-    renderer.outputColorSpace=T.SRGBColorSpace;
-    renderer.toneMapping=T.ACESFilmicToneMapping;
-    renderer.toneMappingExposure=1.02;
-    canvasWrap.appendChild(renderer.domElement);
-
-    scene=new T.Scene();
-    camera=new T.PerspectiveCamera(31,1,.1,60);
-
-    ambientLight=new T.HemisphereLight(0xf5d7a8,0x0a0710,1.28);
-    scene.add(ambientLight);
-
-    keyLight=new T.SpotLight(0xffd6a1,44,28,Math.PI/5,.5,1.4);
-    keyLight.position.set(3.8,8.5,5.2);
-    keyLight.castShadow=true;
-    keyLight.shadow.mapSize.set(1024,1024);
-    keyLight.shadow.bias=-.00035;
-    keyLight.target.position.set(0,0,0);
-    scene.add(keyLight,keyLight.target);
-
-    rimLight=new T.PointLight(0x8b5b9f,15,20,2);
-    rimLight.position.set(-5.2,3.6,-3.2);
-    scene.add(rimLight);
-
-    const floorMat=new T.MeshPhysicalMaterial({
-      color:0x151215,roughness:.87,metalness:.02,clearcoat:.08,clearcoatRoughness:.8
-    });
-    floor=new T.Mesh(new T.PlaneGeometry(10.4,6.7),floorMat);
-    floor.rotation.x=-Math.PI/2;
-    floor.position.y=0;
-    floor.receiveShadow=true;
-    scene.add(floor);
-
-    const borderGeo=new T.BufferGeometry();
-    borderGeo.setFromPoints([
-      new T.Vector3(-5.02,.014,-3.14),new T.Vector3(5.02,.014,-3.14),
-      new T.Vector3(5.02,.014,3.14),new T.Vector3(-5.02,.014,3.14),
-      new T.Vector3(-5.02,.014,-3.14)
-    ]);
-    tableBorder=new T.Line(borderGeo,new T.LineBasicMaterial({color:0x8e6840,transparent:true,opacity:.34}));
-    scene.add(tableBorder);
-
-    // Decorative inlaid lines on the table, subtle enough not to fight the dice.
-    const inlayMat=new T.LineBasicMaterial({color:0x5f4936,transparent:true,opacity:.15});
-    for(const z of [-2.2,2.2]){
-      const g=new T.BufferGeometry().setFromPoints([new T.Vector3(-4.6,.01,z),new T.Vector3(4.6,.01,z)]);
-      scene.add(new T.Line(g,inlayMat));
+  function setMuted(value) {
+    muted = !!value;
+    try { localStorage.setItem('rasthoria-dice-muted', muted ? '1' : '0'); } catch (_) {}
+    if (sound) { sound.textContent = muted ? 'Sonido: apagado' : 'Sonido: activado'; sound.setAttribute('aria-pressed', String(muted)); sound.setAttribute('aria-label', muted ? 'Activar sonido de dados' : 'Silenciar dados'); }
+  }
+  function unlockAudio() {
+    if (muted) return;
+    try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume().catch(() => {}); } catch (_) {}
+  }
+  function impact(strength) {
+    if (muted || !audio || audio.state !== 'running' || performance.now() - lastImpact < 65 || strength < .8) return;
+    lastImpact = performance.now();
+    try {
+      const len = Math.floor(audio.sampleRate * .045), buffer = audio.createBuffer(1, len, audio.sampleRate), data = buffer.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = (random() * 2 - 1) * (1 - i / len) ** 3;
+      const source = audio.createBufferSource(), filter = audio.createBiquadFilter(), gain = audio.createGain();
+      source.buffer = buffer; filter.type = 'lowpass'; filter.frequency.value = 1700;
+      gain.gain.value = Math.min(.05, .012 + strength * .005);
+      source.connect(filter).connect(gain).connect(audio.destination); source.start();
+      source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    } catch (_) {}
+  }
+  function initScene() {
+    if (!T || !C) return false;
+    try {
+      renderer = new T.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
+      renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6));
+      renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+      renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
+      stage.appendChild(renderer.domElement);
+      renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); lost = true; active?.cancel?.(); });
+      renderer.domElement.addEventListener('webglcontextrestored', () => { lost = false; });
+      scene = new T.Scene(); camera = new T.PerspectiveCamera(34, 1, .1, 80);
+      scene.add(new T.HemisphereLight(0xffebd0, 0x25252e, 2.4));
+      const key = new T.DirectionalLight(0xffe0b2, 3.4); key.position.set(-3, 8, 5); key.castShadow = true;
+      key.shadow.mapSize.set(1024, 1024); key.shadow.camera.left = key.shadow.camera.bottom = -9; key.shadow.camera.right = key.shadow.camera.top = 9;
+      key.shadow.camera.near = .1; key.shadow.camera.far = 24; key.shadow.normalBias = .025; key.shadow.bias = -.0001;
+      scene.add(key);
+      const fill = new T.DirectionalLight(0xc8d9ef, 1.3); fill.position.set(5, 4, -4); scene.add(fill);
+      window.addEventListener('resize', () => { if (active?.dice) { resize(); render(); } }, { passive: true });
+      return true;
+    } catch (error) { console.warn('Dados: usando resultado accesible.', error); return false; }
+  }
+  function render() { if (renderer && !lost) { renderer.render(scene, camera); frameCount++; } }
+  function resize() {
+    if (!renderer || !active?.layout) return;
+    const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight), l = active.layout;
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    // Fit all four tray corners and launch height; portrait gets a taller tray.
+    const fov = camera.fov * Math.PI / 180, vertical = (l.depth * .8 + 2.1) / 2;
+    const distance = Math.max(vertical / Math.tan(fov / 2), (l.width / 2 + .48) / (Math.tan(fov / 2) * camera.aspect));
+    camera.position.set(.10 * distance, .83 * distance, .55 * distance);
+    camera.lookAt(0, .20, 0); camera.updateProjectionMatrix();
+    const points = [];
+    for (const x of [-l.width / 2 - .3, l.width / 2 + .3]) for (const z of [-l.depth / 2 - .3, l.depth / 2 + .3]) points.push(v(x, .24, z));
+    for (const d of active.dice || []) for (let i = 0; i < d.frames.length; i += 12) for (const vert of d.shape.verts) points.push(vert.clone().applyQuaternion(d.frames[i].q).add(d.frames[i].p));
+    for (let i = 0; i < 20; i++) {
+      camera.updateMatrixWorld();
+      if (points.every(p => { const a = p.clone().project(camera); return Math.abs(a.x) < .96 && Math.abs(a.y) < .96; })) break;
+      camera.position.multiplyScalar(1.035); camera.lookAt(0, .20, 0);
     }
-
-    resize();
-    window.addEventListener('resize',resize,{passive:true});
-    return true;
+    camera.updateMatrixWorld();
   }
-
-  function resize(){
-    if(!renderer)return;
-    const w=Math.max(1,innerWidth),h=Math.max(1,innerHeight);
-    renderer.setSize(w,h,false);
-    camera.aspect=w/h;
-    if(w/h<.78){
-      camera.position.set(0,9.1,10.8);
-      camera.fov=38;
-    }else{
-      camera.position.set(0,7.2,9.15);
-      camera.fov=31;
+  function makeTray(layout) {
+    tray = new T.Group(); scene.add(tray);
+    const { width: w, depth: d } = layout;
+    const floorMat = new T.MeshStandardMaterial({ color: 0x192b29, roughness: .96, metalness: .02 });
+    const floor = new T.Mesh(new T.BoxGeometry(w, .16, d), floorMat); floor.position.y = -.08; floor.receiveShadow = true; tray.add(floor);
+    const wood = new T.MeshStandardMaterial({ color: 0x39271d, roughness: .55, metalness: .10 });
+    const brass = new T.MeshStandardMaterial({ color: 0xa7824b, roughness: .42, metalness: .65 });
+    for (const [x, z, sx, sz] of [[-w / 2 - .12, 0, .24, d + .48], [w / 2 + .12, 0, .24, d + .48], [0, -d / 2 - .12, w, .24], [0, d / 2 + .12, w, .24]]) {
+      const rail = new T.Mesh(new T.BoxGeometry(sx, .38, sz), wood); rail.position.set(x, .05, z); rail.castShadow = rail.receiveShadow = true; tray.add(rail);
+      const inlay = new T.Mesh(new T.BoxGeometry(sx > .3 ? sx : .035, .012, sz > .3 ? sz : .035), brass); inlay.position.set(x, .247, z); tray.add(inlay);
     }
-    camera.lookAt(0,.55,0);
-    camera.updateProjectionMatrix();
+    // Quiet stitched border, in world space, within the felt.
+    const pts = [v(-w / 2 + .13, .006, -d / 2 + .13), v(w / 2 - .13, .006, -d / 2 + .13), v(w / 2 - .13, .006, d / 2 - .13), v(-w / 2 + .13, .006, d / 2 - .13), v(-w / 2 + .13, .006, -d / 2 + .13)];
+    tray.add(new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({ color: 0x68716a, transparent: true, opacity: .45 })));
   }
-
-  function makeLabelTexture(text,accent=false){
-    const key=`${text}|${accent?'a':'n'}`;
-    if(labelTextureCache.has(key))return labelTextureCache.get(key);
-    const c=document.createElement('canvas');c.width=c.height=256;
-    const x=c.getContext('2d');
-    x.clearRect(0,0,256,256);
-    x.textAlign='center';x.textBaseline='middle';
-    const size=String(text).length>2?92:String(text).length>1?116:142;
-    x.font=`700 ${size}px Georgia, serif`;
-    x.lineJoin='round';
-    x.shadowColor='rgba(0,0,0,.78)';x.shadowBlur=13;x.shadowOffsetY=7;
-    x.strokeStyle='rgba(35,19,8,.94)';x.lineWidth=14;
-    x.strokeText(String(text),128,126);
-    x.shadowBlur=0;x.shadowOffsetY=0;
-    x.fillStyle=accent?'#ffe1a7':'#e8c48d';
-    x.fillText(String(text),128,126);
-    x.strokeStyle='rgba(255,239,204,.20)';x.lineWidth=2;
-    x.strokeText(String(text),128,126);
-    const tex=new T.CanvasTexture(c);
-    tex.colorSpace=T.SRGBColorSpace;
-    tex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy?.()||1);
-    tex.needsUpdate=true;
-    labelTextureCache.set(key,tex);
-    return tex;
-  }
-
   function triangleFaceGroups(geometry){
     const g=geometry.index?geometry.toNonIndexed():geometry.clone();
     const a=g.getAttribute('position');
@@ -199,32 +140,27 @@
     return groups;
   }
 
-  function d10GeometryAndFaces(){
-    const s5=Math.sqrt(5),C0=(s5-1)/4,C1=(s5+1)/4,C2=(s5+3)/4;
-    const verts=[
-      [0,C0,C1],[0,C0,-C1],[0,-C0,C1],[0,-C0,-C1],
-      [.5,.5,.5],[.5,.5,-.5],[-.5,-.5,.5],[-.5,-.5,-.5],
-      [C2,-C1,0],[-C2,C1,0],[C0,C1,0],[-C0,-C1,0]
-    ];
-    const faces=[
-      [8,2,6,11],[8,11,7,3],[8,3,1,5],[8,5,10,4],[8,4,0,2],
-      [9,0,4,10],[9,10,5,1],[9,1,3,7],[9,7,11,6],[9,6,2,0]
-    ];
-    const positions=[];
-    const anchors=[];
-    for(const f of faces){
-      const p=f.map(i=>new T.Vector3(...verts[i]));
-      positions.push(...p[0].toArray(),...p[1].toArray(),...p[2].toArray());
-      positions.push(...p[0].toArray(),...p[2].toArray(),...p[3].toArray());
-      const center=p.reduce((acc,v)=>acc.add(v),new T.Vector3()).multiplyScalar(.25);
-      const normal=new T.Vector3().crossVectors(new T.Vector3().subVectors(p[1],p[0]),new T.Vector3().subVectors(p[2],p[0])).normalize();
-      if(normal.dot(center)<0)normal.multiplyScalar(-1);
-      anchors.push({normal,center,area:1,plane:normal.dot(center)});
+  function d10GeometryAndFaces() {
+    // Symmetric pentagonal trapezohedron; ten coplanar kite faces, two poles.
+    // h and a satisfy coplanarity a = h * tan(pi/10)^2.
+    const h = 1.15, a = h * Math.tan(Math.PI / 10) ** 2;
+    const verts = [v(0, h, 0), v(0, -h, 0)];
+    for (let i = 0; i < 10; i++) verts.push(v(Math.cos(i * Math.PI / 5), i % 2 ? a : -a, Math.sin(i * Math.PI / 5)));
+    const polygons = [];
+    for (let i = 0; i < 5; i++) {
+      polygons.push([0, 2 + (2 * i + 9) % 10, 2 + 2 * i, 2 + (2 * i + 1) % 10]);
+      polygons.push([1, 2 + 2 * i, 2 + (2 * i + 1) % 10, 2 + (2 * i + 2) % 10]);
     }
-    const g=new T.BufferGeometry();
-    g.setAttribute('position',new T.Float32BufferAttribute(positions,3));
-    g.computeVertexNormals();g.computeBoundingSphere();
-    return {geometry:g,faces:anchors};
+    const positions = [], faces = [];
+    for (const polygon of polygons) {
+      const p = polygon.map(i => verts[i]), center = p.reduce((sum, point) => sum.add(point), v()).multiplyScalar(.25);
+      let normal = v().crossVectors(p[1].clone().sub(p[0]), p[2].clone().sub(p[0])).normalize();
+      if (normal.dot(center) < 0) { p.reverse(); normal.negate(); }
+      positions.push(...p[0].toArray(), ...p[1].toArray(), ...p[2].toArray(), ...p[0].toArray(), ...p[2].toArray(), ...p[3].toArray());
+      faces.push({ normal, center, plane: normal.dot(center), area: 1 });
+    }
+    const geometry = new T.BufferGeometry(); geometry.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
+    geometry.computeVertexNormals(); geometry.computeBoundingSphere(); return { geometry, faces };
   }
 
   function geometryFor(sides){
@@ -274,408 +210,337 @@
     return out;
   }
 
-  function labelSizeFor(sides){return ({4:.56,6:.62,8:.52,10:.47,12:.40,20:.31})[sides]||.4}
-
-  function makeDie({sides,target,valuesOverride=null,percentileKind=null,index=0}){
-    const spec=geometryFor(sides);
-    const values=valuesOverride||Array.from({length:sides},(_,i)=>i+1);
-    const faces=assignValuesToFaces(spec.faces,values);
-    const group=new T.Group();
-
-    const variants=[0x32251f,0x282127,0x34291f,0x24282a];
-    const bodyColor=percentileKind==='tens'?0x443020:variants[index%variants.length];
-    const bodyMat=new T.MeshPhysicalMaterial({
-      color:bodyColor,roughness:.24,metalness:.20,clearcoat:.92,clearcoatRoughness:.10,
-      emissive:0x110b08,emissiveIntensity:.28,transparent:true,opacity:1
+  function shapeFor(sides) {
+    if (shapes.has(sides)) return shapes.get(sides);
+    const { geometry, faces } = geometryFor(sides);
+    const radius = geometry.boundingSphere.radius, scale = .66 / radius;
+    geometry.scale(scale, scale, scale);
+    const verts = [], attr = geometry.getAttribute('position');
+    for (let i = 0; i < attr.count; i++) { const p = v().fromBufferAttribute(attr, i); if (!verts.some(q => q.distanceTo(p) < 1e-5)) verts.push(p); }
+    faces.forEach(f => {
+      f.center.multiplyScalar(scale); f.plane *= scale;
+      f.indices = verts.map((p, i) => Math.abs(p.dot(f.normal) - f.plane) < 1e-4 ? i : -1).filter(i => i >= 0);
+      const x = verts[f.indices[0]].clone().sub(f.center).normalize(), y = v().crossVectors(f.normal, x);
+      f.indices.sort((a, b) => Math.atan2(verts[a].clone().sub(f.center).dot(y), verts[a].clone().sub(f.center).dot(x)) - Math.atan2(verts[b].clone().sub(f.center).dot(y), verts[b].clone().sub(f.center).dot(x)));
     });
-    const mesh=new T.Mesh(spec.geometry,bodyMat);
-    mesh.castShadow=true;mesh.receiveShadow=false;
-    group.add(mesh);
-
-    const edgeMat=new T.LineBasicMaterial({color:0xc09359,transparent:true,opacity:.64});
-    const edges=new T.LineSegments(new T.EdgesGeometry(spec.geometry,20),edgeMat);
-    edges.renderOrder=2;group.add(edges);
-
-    const labels=[];
-    const planeGeo=new T.PlaneGeometry(1,1);
-    const size=labelSizeFor(sides);
-    for(const face of faces){
-      const labelText=percentileKind==='tens'?(Number(face.value)===0?'00':String(face.value)):String(face.value);
-      const mat=new T.MeshBasicMaterial({map:makeLabelTexture(labelText),transparent:true,depthWrite:false,side:T.DoubleSide,toneMapped:false});
-      const plane=new T.Mesh(planeGeo,mat);
-      plane.scale.setScalar(size);
-      plane.position.copy(face.center).addScaledVector(face.normal,.018);
-      plane.quaternion.setFromUnitVectors(ZP,face.normal);
-      plane.renderOrder=3;
-      group.add(plane);labels.push({mesh:plane,mat,face});
+    const positions = [];
+    function polygon(points, outward) {
+      if (v().crossVectors(points[1].clone().sub(points[0]), points[2].clone().sub(points[0])).dot(outward) < 0) points.reverse();
+      for (let i = 1; i < points.length - 1; i++) positions.push(...points[0].toArray(), ...points[i].toArray(), ...points[i + 1].toArray());
     }
-
-    spec.geometry.computeBoundingSphere();
-    const baseRadius=spec.geometry.boundingSphere?.radius||1.1;
-    const scale=sides===20?.84:sides===12?.82:sides===10?.84:sides===8?.82:sides===6?.78:.82;
-    group.scale.setScalar(scale);
-
-    const face=faces.find(f=>Number(f.value)===Number(target))||faces[0];
-    const vertexList=[];
-    const pos=spec.geometry.getAttribute('position');
-    for(let i=0;i<pos.count;i++)vertexList.push(new T.Vector3().fromBufferAttribute(pos,i));
-
-    return {
-      group,mesh,bodyMat,edgeMat,labels,planeGeo,geometry:spec.geometry,
-      target,face,scale,baseRadius,collisionRadius:baseRadius*scale*.72,
-      vertexList,position:new T.Vector3(),velocity:new T.Vector3(),angular:new T.Vector3(),
-      targetQ:new T.Quaternion(),targetY:scale*.7,targetPos:new T.Vector3(),settleReady:false,
-      discarded:false,kept:false,percentileKind
-    };
-  }
-
-  function supportHeight(die,q){
-    let minY=Infinity;
-    const v=new T.Vector3();
-    for(const raw of die.vertexList){
-      v.copy(raw).applyQuaternion(q).multiplyScalar(die.scale);
-      if(v.y<minY)minY=v.y;
-    }
-    return Math.max(.25,-minY+.022);
-  }
-
-  function prepareTarget(die){
-    const current=die.group.quaternion.clone();
-    const worldN=die.face.normal.clone().applyQuaternion(current).normalize();
-    const align=new T.Quaternion().setFromUnitVectors(worldN,UP);
-    die.targetQ.copy(align.multiply(current));
-    const yaw=new T.Quaternion().setFromAxisAngle(UP,(Math.random()-.5)*1.4);
-    die.targetQ.premultiply(yaw).normalize();
-    die.targetY=supportHeight(die,die.targetQ);
-    die.targetPos.set(die.position.x,die.targetY,die.position.z);
-    die.settleReady=true;
-  }
-
-  function setDiscarded(die,discard){
-    die.discarded=discard;
-    if(discard){
-      die.bodyMat.opacity=.34;die.edgeMat.opacity=.22;
-      die.labels.forEach(x=>x.mat.opacity=.38);
-    }else{
-      die.bodyMat.opacity=1;die.edgeMat.opacity=.92;
-      die.bodyMat.emissive.setHex(0x3a2009);die.bodyMat.emissiveIntensity=.55;
-      die.labels.forEach(x=>x.mat.opacity=1);
-    }
-  }
-
-  function normalizeRoll(input){
-    const r=input&&typeof input==='object'?input:{};
-    const sides=[4,6,8,10,12,20,100].includes(Number(r.sides))?Number(r.sides):20;
-    let values=Array.isArray(r.values)?r.values.map(Number).filter(Number.isFinite):[];
-    if(!values.length){
-      const n=Math.max(1,Math.min(6,Number(r.count)||1));
-      values=Array.from({length:n},()=>1+Math.floor(Math.random()*sides));
-    }
-    return {
-      sides,count:Number(r.count)||values.length,values,kept:Array.isArray(r.kept)?r.kept.map(Number):values,
-      modifier:Number(r.modifier)||0,total:Number.isFinite(Number(r.total))?Number(r.total):values.reduce((a,b)=>a+b,0)+(Number(r.modifier)||0),
-      natural:r.natural==null?null:Number(r.natural),advantage:r.advantage||'normal',success:r.success,critical:!!r.critical,
-      purpose:String(r.purpose||r.reason||'Tirada'),actor:r.actor||'player',dc:r.dc
-    };
-  }
-
-  function expandVisualDice(roll){
-    const specs=[];
-    if(roll.sides===100){
-      for(const v of roll.values){
-        const value=v===100?0:v;
-        const tens=value===0?0:Math.floor(value/10)*10;
-        const ones=value===0?0:value%10;
-        specs.push({sides:10,target:tens,valuesOverride:[0,10,20,30,40,50,60,70,80,90],percentileKind:'tens'});
-        specs.push({sides:10,target:ones,valuesOverride:[0,1,2,3,4,5,6,7,8,9],percentileKind:'ones'});
-      }
-    }else{
-      roll.values.forEach(v=>specs.push({sides:roll.sides,target:v}));
-    }
-    return specs.slice(0,MAX_VISUAL_DICE);
-  }
-
-  function titleFor(roll){
-    const s=roll.purpose.toLocaleLowerCase('es');
-    if(s.includes('iniciativa'))return 'Iniciativa';
-    if(s.includes('ataque'))return 'Tirada de ataque';
-    if(s.includes('daño')||s.includes('dano'))return 'Daño';
-    if(s.includes('muerte'))return 'Salvación contra la muerte';
-    if(s.includes('salv'))return 'Salvación';
-    if(s.includes('libre'))return 'Tirada libre';
-    if(s.includes('cur'))return 'Recuperación';
-    return roll.purpose.length>70?'El destino decide':roll.purpose;
-  }
-
-  function signed(n){return n>0?`+${n}`:n<0?String(n):'+0'}
-  function notationFor(r){
-    if(r.sides===20&&r.advantage==='advantage')return `2D20 · VENTAJA · ${signed(r.modifier)}`;
-    if(r.sides===20&&r.advantage==='disadvantage')return `2D20 · DESVENTAJA · ${signed(r.modifier)}`;
-    return `${r.count}D${r.sides} · ${signed(r.modifier)}`;
-  }
-
-  function verdictFor(r){
-    if(r.critical)return 'CRÍTICO';
-    if(r.sides===20&&r.count===1&&r.natural===1)return '1 NATURAL';
-    if(r.success===true)return 'ÉXITO';
-    if(r.success===false)return 'FALLO';
-    return '';
-  }
-
-  function showResult(r){
-    const verdict=verdictFor(r);
-    const shown=r.sides===20&&r.count===1&&r.natural!=null?r.natural:r.total;
-    const modPart=r.modifier?` ${signed(r.modifier)}`:'';
-    resultMain.innerHTML=`<span>Resultado</span><strong>${escapeHTML(String(shown))}</strong>${r.sides===20&&r.count===1&&r.natural!=null&&r.total!==r.natural?`<span>${escapeHTML(modPart)} = ${escapeHTML(String(r.total))}</span>`:''}${verdict?`<span class="ras-dice-verdict">${escapeHTML(verdict)}</span>`:''}`;
-    let detail=`[${r.values.join(', ')}]`;
-    if(r.advantage!=='normal'&&r.kept?.length)detail+=` → conserva ${r.kept[0]}`;
-    if(!(r.sides===20&&r.count===1&&r.natural!=null))detail+=` ${signed(r.modifier)} = ${r.total}`;
-    if(r.dc!=null)detail+=` · objetivo ${r.dc}`;
-    resultDetail.textContent=detail;
-    overlay.classList.toggle('is-critical',!!r.critical);
-    overlay.classList.toggle('is-fumble',r.sides===20&&r.count===1&&r.natural===1);
-    overlay.classList.add('has-result');
-  }
-
-  function escapeHTML(s){return s.replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-
-  function ensureAudio(){
-    if(muted)return null;
-    try{
-      if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-      if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
-      return audioCtx;
-    }catch{return null}
-  }
-
-  function playImpact(strength=.5,force=false){
-    const ctx=ensureAudio();if(!ctx)return;
-    const now=performance.now();
-    if(!force&&now-lastImpactAt<42)return;
-    lastImpactAt=now;
-    try{
-      const dur=.045+.035*Math.min(1,strength);
-      const len=Math.max(1,Math.floor(ctx.sampleRate*dur));
-      const buf=ctx.createBuffer(1,len,ctx.sampleRate),data=buf.getChannelData(0);
-      for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.5);
-      const src=ctx.createBufferSource();src.buffer=buf;
-      const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=600+strength*1250;bp.Q.value=.7;
-      const gain=ctx.createGain();gain.gain.setValueAtTime(.0001,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.018+.055*strength,ctx.currentTime+.003);gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+dur);
-      src.connect(bp).connect(gain).connect(ctx.destination);src.start();src.stop(ctx.currentTime+dur+.01);
-      const osc=ctx.createOscillator(),og=ctx.createGain();osc.type='sine';osc.frequency.value=145+strength*95;og.gain.setValueAtTime(.012*strength,ctx.currentTime);og.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.045);osc.connect(og).connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+.05);
-    }catch{}
-  }
-
-  function playThrow(){
-    const ctx=ensureAudio();if(!ctx)return;
-    try{
-      const osc=ctx.createOscillator(),g=ctx.createGain();osc.type='triangle';osc.frequency.setValueAtTime(92,ctx.currentTime);osc.frequency.exponentialRampToValueAtTime(58,ctx.currentTime+.16);g.gain.setValueAtTime(.0001,ctx.currentTime);g.gain.exponentialRampToValueAtTime(.022,ctx.currentTime+.018);g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.17);osc.connect(g).connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+.18);
-    }catch{}
-  }
-
-  function spawnDice(specs,roll){
-    const dice=specs.map((s,i)=>makeDie({...s,index:i}));
-    const n=dice.length;
-    const wide=innerWidth/innerHeight>.8;
-    const xSpread=wide?Math.min(3.2,.57*n):Math.min(1.8,.45*n);
-    dice.forEach((d,i)=>{
-      const frac=n===1?.5:i/(n-1);
-      d.position.set((frac-.5)*xSpread+(Math.random()-.5)*.52,3.9+Math.random()*1.35,-2.05+(Math.random()-.5)*.55);
-      d.velocity.set((Math.random()-.5)*2.15,-.55-Math.random()*.55,3.4+Math.random()*2.15);
-      d.angular.set((Math.random()-.5)*14,(Math.random()-.5)*16,(Math.random()-.5)*13);
-      d.group.position.copy(d.position);
-      d.group.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-      scene.add(d.group);
+    const inset = faces.map(f => new Map(f.indices.map(i => [i, f.center.clone().lerp(verts[i], .94)])));
+    faces.forEach((f, i) => polygon(f.indices.map(k => inset[i].get(k)), f.normal));
+    const done = new Set();
+    faces.forEach((f, i) => f.indices.forEach((a, k) => {
+      const b = f.indices[(k + 1) % f.indices.length], key = [a, b].sort((x, y) => x - y).join(',');
+      if (done.has(key)) return; done.add(key);
+      const j = faces.findIndex((g, n) => n !== i && g.indices.includes(a) && g.indices.includes(b));
+      if (j >= 0) polygon([inset[i].get(a), inset[i].get(b), inset[j].get(b), inset[j].get(a)], verts[a].clone().add(verts[b]));
+    }));
+    verts.forEach((p, k) => {
+      const points = inset.filter(m => m.has(k)).map(m => m.get(k));
+      const n = p.clone().normalize(), x = points[0].clone().sub(p).addScaledVector(n, -points[0].clone().sub(p).dot(n)).normalize(), y = v().crossVectors(n, x);
+      points.sort((a, b) => Math.atan2(a.clone().sub(p).dot(y), a.clone().sub(p).dot(x)) - Math.atan2(b.clone().sub(p).dot(y), b.clone().sub(p).dot(x)));
+      polygon(points, n);
     });
-
-    if(roll.sides===20&&roll.advantage!=='normal'&&dice.length>=2){
-      const keep=roll.kept?.[0];
-      let keptIndex=roll.values.findIndex(v=>Number(v)===Number(keep));
-      if(keptIndex<0)keptIndex=0;
-      dice.forEach((d,i)=>d.kept=i===keptIndex);
-    }
-    return dice;
+    const chamfered = new T.BufferGeometry(); chamfered.setAttribute('position', new T.Float32BufferAttribute(positions, 3)); chamfered.computeVertexNormals();
+    geometry.dispose();
+    const shape = { sides, geometry: chamfered, faces, verts, hull: new C.ConvexPolyhedron({ vertices: verts.map(p => new C.Vec3(p.x, p.y, p.z)), faces: faces.map(f => f.indices) }) };
+    shapes.set(sides, shape); return shape;
   }
-
-  function collideDice(dice){
-    for(let i=0;i<dice.length;i++)for(let j=i+1;j<dice.length;j++){
-      const a=dice[i],b=dice[j];
-      const delta=new T.Vector3().subVectors(b.position,a.position);
-      const min=a.collisionRadius+b.collisionRadius;
-      const dist=delta.length();
-      if(dist>0&&dist<min){
-        const n=delta.multiplyScalar(1/dist);
-        const penetration=min-dist;
-        a.position.addScaledVector(n,-penetration*.5);b.position.addScaledVector(n,penetration*.5);
-        const rel=new T.Vector3().subVectors(b.velocity,a.velocity);
-        const sep=rel.dot(n);
-        if(sep<0){
-          const impulse=-sep*.72;
-          a.velocity.addScaledVector(n,-impulse);b.velocity.addScaledVector(n,impulse);
-          a.angular.add(new T.Vector3((Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2));
-          b.angular.add(new T.Vector3((Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2));
-          playImpact(Math.min(.65,Math.abs(sep)/7));
-        }
-      }
-    }
+  function layoutFor(n) {
+    const portrait = innerWidth < 600;
+    const cols = Math.min(n, portrait ? 2 : 4), rows = Math.ceil(n / cols);
+    return { cols, rows, width: Math.max(4.2, cols * 2.15 + .5), depth: Math.max(3.5, rows * 2.3 + .9) };
   }
-
-  function stepPhysical(dice,dt,tSec){
-    const xBound=innerWidth/innerHeight<.8?2.35:4.15,zMin=-2.72,zMax=2.45;
-    for(const d of dice){
-      d.velocity.y-=13.8*dt;
-      d.position.addScaledVector(d.velocity,dt);
-      const floorY=d.collisionRadius*.72;
-      if(d.position.y<floorY){
-        const impact=Math.abs(d.velocity.y);
-        d.position.y=floorY;
-        if(d.velocity.y<0){
-          d.velocity.y=-d.velocity.y*(impact>1.2?.43:.22);
-          d.velocity.x*=.79;d.velocity.z*=.79;d.angular.multiplyScalar(.82);
-          if(impact>.8)playImpact(Math.min(1,impact/8));
-        }
-      }
-      if(d.position.x>xBound){d.position.x=xBound;d.velocity.x=-Math.abs(d.velocity.x)*.58;playImpact(.32)}
-      if(d.position.x<-xBound){d.position.x=-xBound;d.velocity.x=Math.abs(d.velocity.x)*.58;playImpact(.32)}
-      if(d.position.z>zMax){d.position.z=zMax;d.velocity.z=-Math.abs(d.velocity.z)*.55;playImpact(.28)}
-      if(d.position.z<zMin){d.position.z=zMin;d.velocity.z=Math.abs(d.velocity.z)*.55;playImpact(.28)}
-      const mag=d.angular.length();
-      if(mag>.001){
-        const dq=new T.Quaternion().setFromAxisAngle(d.angular.clone().normalize(),mag*dt);
-        d.group.quaternion.premultiply(dq).normalize();
-      }
-      if(d.position.y<=floorY+.02){d.velocity.x*=Math.pow(.20,dt);d.velocity.z*=Math.pow(.20,dt);d.angular.multiplyScalar(Math.pow(.15,dt))}
-      d.group.position.copy(d.position);
+  function support(shape, q) { let low = Infinity; for (const p of shape.verts) low = Math.min(low, p.clone().applyQuaternion(q).y); return -low; }
+  function snapshot(b) { return { p: v(b.position.x, b.position.y, b.position.z), q: new T.Quaternion(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w) }; }
+  function simulate(specs, layout) {
+    const world = new C.World({ gravity: new C.Vec3(0, -20, 0), allowSleep: true });
+    world.solver.iterations = 16; world.solver.tolerance = 1e-7;
+    world.defaultContactMaterial.friction = .58; world.defaultContactMaterial.restitution = .28;
+    world.defaultContactMaterial.contactEquationStiffness = 1e8; world.defaultContactMaterial.contactEquationRelaxation = 4;
+    const floor = new C.Body({ mass: 0, shape: new C.Plane() }); floor.quaternion.setFromEuler(-Math.PI / 2, 0, 0); world.addBody(floor);
+    for (const [x, z, sx, sz] of [[-layout.width / 2 - .1, 0, .1, layout.depth / 2 + .2], [layout.width / 2 + .1, 0, .1, layout.depth / 2 + .2], [0, -layout.depth / 2 - .1, layout.width / 2, .1], [0, layout.depth / 2 + .1, layout.width / 2, .1]]) {
+      const wall = new C.Body({ mass: 0, shape: new C.Box(new C.Vec3(sx, 2, sz)), position: new C.Vec3(x, 1, z) }); world.addBody(wall);
     }
-    collideDice(dice);
-  }
-
-  function beginSettle(dice){
-    dice.forEach((d,i)=>{
-      prepareTarget(d);
-      d.targetPos.x=Math.max(-3.6,Math.min(3.6,d.position.x));
-      d.targetPos.z=Math.max(-2.1,Math.min(2.1,d.position.z));
-      // Avoid a heap right in the exact center for multi-die rolls.
-      if(dice.length>1){
-        const spread=Math.min(2.8,.52*dice.length);
-        d.targetPos.x+=(i-(dice.length-1)/2)*(spread/Math.max(1,dice.length-1))*.32;
-      }
+    const impacts = []; let step = 0;
+    const dice = specs.map((spec, i) => {
+      const shape = shapeFor(spec.sides), col = i % layout.cols, row = Math.floor(i / layout.cols);
+      const x = (col - (Math.min(layout.cols, specs.length - row * layout.cols) - 1) / 2) * 2.15;
+      const z = (row - (layout.rows - 1) / 2) * 2.3;
+      const body = new C.Body({ mass: .14, shape: new C.ConvexPolyhedron({ vertices: shape.verts.map(p => new C.Vec3(p.x, p.y, p.z)), faces: shape.faces.map(f => f.indices.slice()) }), position: new C.Vec3(x + (random() - .5) * .12, 1.6 + random() * .35, z - .5), linearDamping: .25, angularDamping: .28, sleepSpeedLimit: .13, sleepTimeLimit: .20 });
+      body.quaternion.setFromEuler(random() * 6.28, random() * 6.28, random() * 6.28);
+      body.velocity.set((random() - .5) * .6, -.3, .9 + random() * .5);
+      body.angularVelocity.set((random() - .5) * 16, (random() - .5) * 14, (random() - .5) * 16);
+      body.addEventListener('collide', e => { const strength = Math.abs(e.contact.getImpactVelocityAlongNormal()); if (strength > .8) impacts.push({ step, strength }); });
+      world.addBody(body); return { spec, shape, body, frames: [snapshot(body)] };
     });
-  }
-
-  function smoothstep(x){x=Math.max(0,Math.min(1,x));return x*x*(3-2*x)}
-
-  function stepSettle(dice,p){
-    const s=smoothstep(p);
-    for(const d of dice){
-      d.group.quaternion.slerp(d.targetQ,.09+.17*s);
-      d.position.lerp(d.targetPos,.09+.17*s);
-      // tiny final rocking gives a last physical-looking settle without changing the face.
-      d.group.position.copy(d.position);
+    // Bounded precomputation, independent of rendering speed or tab visibility.
+    for (step = 1; step <= 540; step++) {
+      world.step(DT);
+      for (const d of dice) d.frames.push(snapshot(d.body));
+      if (step > 144 && dice.every(d => d.body.sleepState === C.Body.SLEEPING)) break;
     }
-  }
-
-  function render(){renderer.render(scene,camera)}
-
-  function cleanupDice(dice){
-    for(const d of dice){
-      scene.remove(d.group);
-      d.bodyMat.dispose();d.edgeMat.dispose();d.geometry.dispose();d.planeGeo.dispose();
-      d.labels.forEach(x=>x.mat.dispose());
-      for(const child of d.group.children){if(child.geometry&&child.geometry!==d.geometry&&child.geometry!==d.planeGeo)child.geometry.dispose?.()}
+    const steps = Math.min(step, 540);
+    // Micro-settle onto the nearest support face, never toward the requested value.
+    // Contact height is recomputed from EVERY vertex on every displayed pose.
+    for (const d of dice) {
+      const end = d.frames.at(-1), bottom = d.shape.faces.reduce((a, b) => a.normal.clone().applyQuaternion(end.q).y < b.normal.clone().applyQuaternion(end.q).y ? a : b);
+      const normal = bottom.normal.clone().applyQuaternion(end.q);
+      const correction = alignDirections(normal, v(0, -1, 0));
+      const target = correction.multiply(end.q).normalize();
+      d.correction = end.q.angleTo(target);
+      for (let j = 1; j <= 30; j++) {
+        const t = j / 30, s = t * t * (3 - 2 * t), q = end.q.clone().slerp(target, s);
+        d.frames.push({ p: v(end.p.x, support(d.shape, q) + .003, end.p.z), q });
+      }
+      // Lift only solver tolerances; no rounded proxy collider and no submerged vertices.
+      for (const f of d.frames) f.p.y = Math.max(f.p.y, support(d.shape, f.q) + .003);
+      d.end = d.frames.at(-1);
     }
+    return { dice, impacts, steps: steps + 30 };
   }
-
-  async function animateRoll(raw,opts={}){
-    const roll=normalizeRoll(raw);
-    ensureAudio();
-    overlay.classList.remove('has-result','is-critical','is-fumble','is-closing');
-    titleEl.textContent=titleFor(roll);
-    notationEl.textContent=notationFor(roll);
-    resultMain.textContent='';resultDetail.textContent='';
-    overlay.setAttribute('aria-hidden','false');
-    overlay.classList.add('is-open');
+  // Rotate the fixed numbered shell onto an equivalent geometric orientation.
+  // All labels are assigned BEFORE the first visible frame and stay on their faces.
+  function alignDirections(from, to) {
+    const a = from.clone().normalize(), b = to.clone().normalize();
+    if (a.dot(b) < -1 + 1e-8) {
+      const axis = v().crossVectors(a, Math.abs(a.x) < .8 ? v(1, 0, 0) : v(0, 1, 0)).normalize();
+      return new T.Quaternion().setFromAxisAngle(axis, Math.PI);
+    }
+    return new T.Quaternion().setFromUnitVectors(a, b);
+  }
+  function shellRotation(shape, from, to) {
+    from = from.clone().normalize(); to = to.clone().normalize();
+    const align = alignDirections(from, to);
+    let best = null, error = Infinity;
+    for (let i = 0; i < 120; i++) {
+      const q = new T.Quaternion().setFromAxisAngle(to, i * Math.PI / 60).multiply(align);
+      const e = Math.max(...shape.verts.map(p => Math.min(...shape.verts.map(w => p.clone().applyQuaternion(q).distanceTo(w)))));
+      if (e < error) { error = e; best = q; }
+    }
+    // General face axes are not multiples of 3 degrees: derive exact candidates.
+    for (const a of shape.verts) for (const b of shape.verts) {
+      const ra = a.clone().applyQuaternion(align), pa = ra.clone().addScaledVector(to, -ra.dot(to)), pb = b.clone().addScaledVector(to, -b.dot(to));
+      if (pa.length() < 1e-5 || pb.length() < 1e-5 || Math.abs(ra.dot(to) - b.dot(to)) > 1e-4) continue;
+      pa.normalize(); pb.normalize();
+      const angle = Math.atan2(to.dot(v().crossVectors(pa, pb)), pa.dot(pb));
+      const q = new T.Quaternion().setFromAxisAngle(to, angle).multiply(align);
+      const e = Math.max(...shape.verts.map(p => Math.min(...shape.verts.map(w => p.clone().applyQuaternion(q).distanceTo(w)))));
+      if (e < error) { error = e; best = q; }
+    }
+    if (from.clone().applyQuaternion(best).distanceTo(to) > 1e-5) throw new Error("Shell axis mismatch");
+    if (error > 1e-4) throw new Error('No se encontró simetría del dado');
+    return best;
+  }
+  function numberTexture(text) {
+    if (textures.has(text)) return textures.get(text);
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext('2d'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `600 ${text.length > 1 ? 76 : 88}px Georgia,serif`;
+    ctx.fillStyle = '#f8dfae'; ctx.fillText(text, 64, 66);
+    if (text === '6' || text === '9') { ctx.fillRect(48, 105, 32, 3); }
+    const texture = new T.CanvasTexture(canvas); texture.colorSpace = T.SRGBColorSpace; texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+    textures.set(text, texture); return texture;
+  }
+  function label(group, text, position, normal, size, upHint) {
+    const material = new T.MeshBasicMaterial({ map: numberTexture(text), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, toneMapped: false });
+    const mesh = new T.Mesh(new T.PlaneGeometry(size, size), material);
+    mesh.position.copy(position).addScaledVector(normal, .0015);
+    const y = upHint.clone().addScaledVector(normal, -upHint.dot(normal)).normalize();
+    const x = v().crossVectors(y, normal).normalize();
+    mesh.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(x, y, normal));
+    group.add(mesh); return mesh;
+  }
+  function makeDie(d, index) {
+    const { shape, spec, end } = d;
+    const outer = new T.Group(), shell = new T.Group(); outer.add(shell); scene.add(outer);
+    d.group = outer; d.shell = shell; d.labels = [];
+    const material = new T.MeshStandardMaterial({ color: spec.kind === 'tens' ? 0x67503a : [0x3b4849, 0x514554, 0x3d514b, 0x594335][index % 4], roughness: .42, metalness: .12 });
+    d.material = material;
+    const body = new T.Mesh(shape.geometry, material); body.castShadow = true; body.receiveShadow = true; shell.add(body);
+    const edges = new T.LineSegments(new T.EdgesGeometry(shape.geometry, 24), new T.LineBasicMaterial({ color: 0xb79862, transparent: true, opacity: .28 })); shell.add(edges); d.edges = edges;
+    const values = spec.values || Array.from({ length: spec.sides }, (_, i) => i + 1);
+    const numbered = assignValuesToFaces(shape.faces, values);
+    if (spec.sides === 4) {
+      // A real tetrahedron rests on a face and has a VERTEX on top.
+      // Standard top-reading D4: repeat the vertex value on its three incident faces.
+      const top = shape.verts.reduce((a, b) => a.clone().applyQuaternion(end.q).y > b.clone().applyQuaternion(end.q).y ? a : b).clone().normalize();
+      const targetVertex = shape.verts[spec.target - 1].clone().normalize();
+      shell.quaternion.copy(shellRotation(shape, targetVertex, top));
+      d.readAxis = targetVertex; d.displayed = spec.target;
+      shape.faces.forEach(f => f.indices.forEach(i => {
+        const vertex = shape.verts[i], pos = f.center.clone().lerp(vertex, .49), up = vertex.clone().sub(f.center).normalize();
+        d.labels.push(label(shell, String(i + 1), pos, f.normal, .245, up));
+      }));
+    } else {
+      const topFace = shape.faces.reduce((a, b) => a.normal.clone().applyQuaternion(end.q).y > b.normal.clone().applyQuaternion(end.q).y ? a : b);
+      const targetFace = numbered.find(f => f.value === spec.target);
+      if (!targetFace) throw new Error('Resultado fuera de las caras');
+      shell.quaternion.copy(shellRotation(shape, targetFace.normal, topFace.normal));
+      d.topAxis = topFace.normal.clone(); d.readAxis = targetFace.normal.clone(); d.displayed = targetFace.value;
+      const size = ({ 6: .60, 8: .42, 10: .36, 12: .35, 20: .29 })[spec.sides];
+      // Select a physical in-plane inscription direction before launch for easy final reading.
+      const finalQ = end.q.clone().multiply(shell.quaternion), inv = finalQ.clone().invert();
+      const cameraUp = v(0, 0, -1).applyQuaternion(inv);
+      numbered.forEach(f => {
+        let up = cameraUp.clone().addScaledVector(f.normal, -cameraUp.dot(f.normal));
+        if (up.lengthSq() < .01) up = shape.verts[f.indices[0]].clone().sub(f.center);
+        const text = spec.kind === 'tens' && f.value === 0 ? '00' : String(f.value);
+        d.labels.push(label(shell, text, f.center, f.normal, size, up));
+      });
+    }
+    const alignment = d.readAxis.clone().applyQuaternion(shell.quaternion).applyQuaternion(end.q).dot(UP);
+    if (alignment < .9999) throw new Error('La cara final no coincide con el resultado');
+    // A ring on the felt identifies the KEPT die without obscuring any numeral.
+    const ring = new T.Mesh(new T.RingGeometry(.76, .79, 64), new T.MeshBasicMaterial({ color: 0xd1b078, transparent: true, opacity: .8, side: T.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(end.p.x, .012, end.p.z); ring.visible = false; scene.add(ring); d.ring = ring;
+    return d;
+  }
+  function expand(r) {
+    return r.values.flatMap(value => r.sides === 100 ? [
+      { sides: 10, target: Math.floor((value % 100) / 10) * 10, values: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90], kind: 'tens' },
+      { sides: 10, target: value % 10, values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], kind: 'ones' }
+    ] : [{ sides: r.sides, target: value }]);
+  }
+  function normalize(raw) {
+    if (!raw || ![4, 6, 8, 10, 12, 20, 100].includes(+raw.sides) || !Array.isArray(raw.values) || !raw.values.length) throw new Error('La tirada no contiene valores del motor');
+    const sides = +raw.sides, values = raw.values.map(Number);
+    if (values.some(n => !Number.isInteger(n) || n < 1 || n > sides)) throw new Error('Valores de dado no válidos');
+    return { ...raw, sides, values, kept: raw.kept?.map(Number) || values.slice(), advantage: raw.advantage || 'normal', modifier: +raw.modifier || 0, purpose: String(raw.purpose || raw.reason || 'Tirada'), count: +raw.count || values.length };
+  }
+  function finalText(r) {
+    const special = r.sides === 20 && r.advantage !== 'normal' && r.values.length === 2;
+    if (special) return `Se conserva ${r.kept[0]} · dado marcado en bronce`;
+    if (r.sides === 100) return 'Decenas + unidades · 00 y 0 representan 100';
+    if (r.sides === 4) return 'D4 · lee el número junto a la punta superior';
+    return r.modifier ? `Modificador ${r.modifier > 0 ? '+' : ''}${r.modifier} · total ${r.total}` : 'Tirada completada';
+  }
+  function open(r) {
+    overlay.querySelector('.ras-dice-title').textContent = r.purpose;
+    caption.textContent = r.sides === 20 && r.advantage !== 'normal' ? `2D20 · ${r.advantage === 'advantage' ? 'Ventaja' : 'Desventaja'}` : `${r.count}D${r.sides}${r.sides === 100 ? ' · dos D10 por resultado' : ''}`;
+    status.textContent = ''; fallback.hidden = true; stage.hidden = false;
+    overlay.classList.add('is-open'); overlay.setAttribute('aria-hidden', 'false');
     document.documentElement.classList.add('ras-dice-cinematic');
-    playThrow();
-
-    const specs=expandVisualDice(roll);
-    const dice=spawnDice(specs,roll);
-    const physicalMs=REDUCED?180:1450;
-    const settleMs=REDUCED?160:620;
-    const holdMs=REDUCED?330:830;
-    let settleStarted=false;
-    const start=performance.now();
-    let prev=start;
-
-    await new Promise(resolve=>{
-      function frame(now){
-        const elapsed=now-start,dt=Math.min(.034,Math.max(.001,(now-prev)/1000));prev=now;
-        if(elapsed<physicalMs){
-          stepPhysical(dice,dt,elapsed/1000);
-        }else if(elapsed<physicalMs+settleMs){
-          if(!settleStarted){settleStarted=true;beginSettle(dice);playImpact(.76,true)}
-          stepSettle(dice,(elapsed-physicalMs)/settleMs);
-        }else{
-          if(!settleStarted){settleStarted=true;beginSettle(dice)}
-          dice.forEach(d=>{d.group.quaternion.copy(d.targetQ);d.position.copy(d.targetPos);d.group.position.copy(d.position)});
-          render();resolve();return;
-        }
-        // A short critical light flare while dice are in motion.
-        keyLight.intensity=roll.critical?48+Math.sin(elapsed*.025)*5:44;
-        render();requestAnimationFrame(frame);
+  }
+  async function showFallback(r) {
+    stage.hidden = true; fallback.hidden = false;
+    fallback.textContent = `${r.values.map(x => `D${r.sides}: ${x}`).join(' · ')}${Number.isFinite(+r.total) ? ` — Total: ${r.total}` : ''}`;
+    status.textContent = 'Resultado de la tirada'; await wait(reduced() ? 450 : 1100);
+  }
+  function disposeGroup(group, skipGeometry) {
+    if (!group) return;
+    scene.remove(group);
+    const materials = new Set();
+    group.traverse(o => { if (o.geometry && o.geometry !== skipGeometry) o.geometry.dispose(); if (o.material) materials.add(o.material); });
+    materials.forEach(m => m.dispose());
+  }
+  function finish() {
+    if (active?.dice) for (const d of active.dice) { disposeGroup(d.group, d.shape.geometry); disposeGroup(d.ring); }
+    disposeGroup(tray); tray = null; active = null;
+    overlay.classList.remove('is-open'); overlay.setAttribute('aria-hidden', 'true'); document.documentElement.classList.remove('ras-dice-cinematic');
+    // No idle render loop. Cached geometries/textures are bounded by the supported faces.
+  }
+  function displayFrame(d, t) {
+    t = Math.max(0, Math.min(t, d.frames.length - 1));
+    const lo = Math.min(Math.floor(t), d.frames.length - 1), hi = Math.min(lo + 1, d.frames.length - 1), f = t - lo;
+    d.group.position.copy(d.frames[lo].p).lerp(d.frames[hi].p, f);
+    d.group.quaternion.copy(d.frames[lo].q).slerp(d.frames[hi].q, f);
+    d.group.position.y = Math.max(d.group.position.y, support(d.shape, d.group.quaternion) + .003);
+  }
+  function play(sim, duration) {
+    return new Promise(resolve => {
+      let raf = 0, timer = 0, complete = false, lastStep = -1;
+      const start = performance.now();
+      function stop() {
+        if (complete) return; complete = true; cancelAnimationFrame(raf); clearTimeout(timer); document.removeEventListener('visibilitychange', visibility);
+        sim.dice.forEach(d => displayFrame(d, d.frames.length - 1)); render(); resolve();
       }
-      requestAnimationFrame(frame);
+      function visibility() { if (document.hidden) stop(); }
+      active.cancel = stop;
+      document.addEventListener('visibilitychange', visibility);
+      function frame(now) {
+        if (complete) return;
+        const progress = Math.max(0, Math.min(1, (now - start) / duration)), at = progress * sim.steps;
+        for (const d of sim.dice) displayFrame(d, at);
+        for (const event of sim.impacts) if (event.step > lastStep && event.step <= at) impact(event.strength);
+        lastStep = at; render();
+        if (progress >= 1) stop(); else raf = requestAnimationFrame(frame);
+      }
+      // Timed completion also handles throttled/background RAF and lost context.
+      timer = setTimeout(stop, duration + 160); raf = requestAnimationFrame(frame);
     });
-
-    if(roll.sides===20&&roll.advantage!=='normal'&&dice.length>=2){
-      dice.forEach(d=>setDiscarded(d,!d.kept));
-      render();
-    }
-    if(roll.critical){keyLight.intensity=60;setTimeout(()=>{if(keyLight)keyLight.intensity=44},180)}
-    showResult(roll);
-    playImpact(roll.critical?1:.68,true);
-    await delay(holdMs);
-    overlay.classList.add('is-closing');
-    await delay(REDUCED?80:220);
-    overlay.classList.remove('is-open','is-closing','has-result','is-critical','is-fumble');
-    overlay.setAttribute('aria-hidden','true');
-    document.documentElement.classList.remove('ras-dice-cinematic');
-    cleanupDice(dice);
-    keyLight.intensity=44;
-    render();
-    return roll;
   }
-
-  function apiRoll(raw,opts){
-    const task=()=>animateRoll(raw,opts).catch(err=>{console.error('RASTHOR·IA Dice roll failed',err);overlay?.classList.remove('is-open');document.documentElement.classList.remove('ras-dice-cinematic');return delay(650)});
-    queue=queue.then(task,task);
-    return queue;
-  }
-
-  function makeTestRoll(sides=20,value=null,count=1,modifier=0,advantage='normal'){
-    sides=Number(sides);count=Math.max(1,Math.min(8,Number(count)||1));
-    const rand=()=>1+Math.floor(Math.random()*sides);
-    let values;
-    if(advantage!=='normal'&&sides===20){values=[value??rand(),rand()];count=1}
-    else values=Array.from({length:count},(_,i)=>i===0&&value!=null?Number(value):rand());
-    const kept=advantage==='advantage'?[Math.max(...values)]:advantage==='disadvantage'?[Math.min(...values)]:values.slice();
-    const natural=sides===20&&count===1?kept[0]:null;
-    return {sides,count,values,kept,modifier:Number(modifier)||0,total:kept.reduce((a,b)=>a+b,0)+(Number(modifier)||0),natural,advantage,purpose:'Tirada de demostración',critical:sides===20&&natural===20,success:null,dc:null};
-  }
-
-  function boot(){
-    createDOM();
-    if(!initScene())return;
-    document.documentElement.classList.add('ras-dice-ready');
-    window.RASTHORIA_DICE={
-      ready:true,version:VERSION,roll:apiRoll,
-      test:(sides,value,count=1,modifier=0,advantage='normal')=>apiRoll(makeTestRoll(sides,value,count,modifier,advantage),{source:'lab'}),
-      mute(v=true){muted=!!v;localStorage.setItem('rasthoria-dice-muted',muted?'1':'0');soundButton?.classList.toggle('is-muted',muted)},
-      get muted(){return muted}
+  function report(sim, r, duration) {
+    return {
+      version: VERSION, requested: r.values.slice(), durationMs: duration,
+      dice: sim.dice.map(d => ({ sides: d.spec.sides, target: d.spec.target, displayed: d.displayed,
+        alignment: d.readAxis.clone().applyQuaternion(d.shell.quaternion).applyQuaternion(d.end.q).dot(UP),
+        minClearance: Math.min(...d.frames.map(f => f.p.y - support(d.shape, f.q))),
+        correctionDegrees: d.correction * 180 / Math.PI, position: d.end.p.toArray(), frames: d.frames.length,
+        retained: d.ring.visible, faceCount: d.shape.faces.length, labelCount: d.labels.length,
+        projected: (() => { const box = new T.Box3().setFromObject(d.group); return [box.min, box.max].map(p => p.clone().project(camera).toArray()); })()
+      })), steps: sim.steps, frameCount
     };
-    render();
-    window.dispatchEvent(new CustomEvent('rasthoria:dice-ready',{detail:{version:VERSION}}));
   }
-
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  async function animate(raw, opts) {
+    let r;
+    try { r = normalize(raw); } catch (error) { console.warn('Dados: presentación omitida.', error); return raw; }
+    open(r);
+    try {
+      if (!renderer || lost || expand(r).length > 12) { await showFallback(r); return raw; }
+      const specs = expand(r), layout = layoutFor(specs.length);
+      let sim;
+      // Reject rare cocked/stacked poses before they can be shown.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        sim = simulate(specs, layout);
+        const separated = sim.dice.every((d, i) => sim.dice.slice(i + 1).every(e => Math.hypot(d.end.p.x - e.end.p.x, d.end.p.z - e.end.p.z) > 1.36));
+        if (separated && sim.dice.every(d => d.correction < .15)) break;
+        if (attempt === 4) throw new Error('La trayectoria no termina despejada');
+      }
+      active = { dice: sim.dice, layout };
+      makeTray(layout); resize();
+      sim.dice.forEach(makeDie);
+      const duration = Math.min(2350, Math.max(1450, sim.steps * DT * 1000));
+      if (reduced()) { sim.dice.forEach(d => displayFrame(d, d.frames.length - 1)); render(); }
+      else await play(sim, duration);
+      if (lost) { await showFallback(r); return raw; }
+      if (r.sides === 20 && r.advantage !== 'normal' && sim.dice.length === 2) {
+        const keep = r.values.indexOf(r.kept[0]);
+        sim.dice.forEach((d, i) => { d.ring.visible = i === keep; if (i !== keep) { d.material.color.multiplyScalar(.60); d.edges.material.opacity = .25; d.labels.forEach(l => { l.material.opacity = .50; }); } });
+      }
+      status.textContent = finalText(r); render();
+      lastReport = report(sim, r, reduced() ? 0 : duration);
+      window.dispatchEvent(new CustomEvent('rasthoria:dice-settled', { detail: lastReport }));
+      await wait(reduced() ? 650 : 800);
+      return raw;
+    } catch (error) {
+      console.warn('Dados: resultado simple tras fallo visual.', error); await showFallback(r); return raw;
+    } finally { finish(); }
+  }
+  function apiRoll(raw, opts = {}) {
+    // Returning the same in-flight presentation prevents double animations, not game rolls.
+    if (raw && typeof raw === 'object' && inFlight.has(raw)) return inFlight.get(raw);
+    unlockAudio();
+    const task = () => animate(raw, opts), promise = queue.then(task, task);
+    queue = promise.catch(() => {});
+    if (raw && typeof raw === 'object') { inFlight.set(raw, promise); promise.finally(() => inFlight.delete(raw)).catch(() => {}); }
+    return promise;
+  }
+  function test(sides = 20, value = sides, count = 1, modifier = 0, advantage = 'normal') {
+    const values = Array.from({ length: advantage === 'normal' ? count : 2 }, (_, i) => i ? 1 + Math.floor(random() * sides) : value);
+    const kept = advantage === 'advantage' ? [Math.max(...values)] : advantage === 'disadvantage' ? [Math.min(...values)] : values.slice();
+    return apiRoll({ sides, values, kept, count, modifier, advantage, total: kept.reduce((a, b) => a + b, 0) + modifier, purpose: 'Prueba de dados' });
+  }
+  function boot() {
+    createDOM(); initScene();
+    // ready also means the functional fallback is ready; callers never need to branch.
+    document.documentElement.classList.add('ras-dice-ready');
+    window.RASTHORIA_DICE = { ready: true, version: VERSION, roll: apiRoll, test, mute: setMuted,
+      get muted() { return muted; }, get lastReport() { return lastReport; },
+      get diagnostics() { return { active: !!active, frameCount, webgl: !!renderer && !lost, textures: textures.size }; } };
+    window.dispatchEvent(new CustomEvent('rasthoria:dice-ready', { detail: { version: VERSION } }));
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true }); else boot();
 })();
