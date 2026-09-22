@@ -1,5 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-21-rules-v4";
+const BUILD = "2026-09-21-rules-v5-inventory-equipment";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -229,6 +229,13 @@ function compactEntitiesForAI(entities) {
   }).slice(0,60);
 }
 
+function equippedItemForAI(character, slot) {
+  const inventory=Array.isArray(character?.inventory)?character.inventory:[];
+  const key=character?.[slot];
+  const item=inventory.find(i=>i?.id===key) || inventory.find(i=>i?.catalog===key);
+  return item?{id:item.id,catalog:item.catalog,name:item.name,quantity:item.quantity}:null;
+}
+
 function publicCampaign(campaign) {
   const c = campaign && typeof campaign === "object" ? campaign : {};
   const character = c.character || {};
@@ -279,6 +286,8 @@ function publicCampaign(campaign) {
       gold: character.gold,
       weapon: character.weapon,
       armor: character.armor,
+      equippedWeapon: equippedItemForAI(character,"weapon"),
+      equippedArmor: equippedItemForAI(character,"armor"),
       resources: character.resources,
       inventory: compactInventoryForAI(character.inventory),
     },
@@ -377,13 +386,30 @@ COMBATE
 
 INVENTARIO, DINERO Y RECURSOS — ESTADO AUTORITATIVO
 - character.inventory y character.gold son la verdad mecánica. La narración NO puede inventar que el personaje posee, usa, entrega, pierde, compra o consume algo que el estado no respalda.
+- equippedWeapon/equippedArmor indican qué objeto concreto está equipado. No asumas que todos los objetos del mismo tipo mecánico están equipados.
 - Si el personaje obtiene, recoge, compra, recibe, fabrica o conserva físicamente un objeto nuevo, usa item_add en ese mismo turno o como consecuencia success/failure de la tirada que lo resuelve.
+- Para equipo que DEBE funcionar mecánicamente, item_add.target debe ser uno de estos catálogos y item_add.text debe ser el NOMBRE REAL que verá el jugador:
+  longsword = arma principal cuerpo a cuerpo STR 1D8;
+  rapier = arma precisa cuerpo a cuerpo DEX 1D8;
+  bow = arma a distancia DEX 1D6;
+  staff = arma ligera/foco STR 1D6;
+  mace = arma contundente STR 1D6;
+  chain = protección pesada CA16;
+  scale = protección media CA14+DEX máx2;
+  leather = protección ligera CA11+DEX;
+  potion = curación 2D4+2;
+  rations = suministros de descanso;
+  tools = herramientas;
+  torch = fuente de luz.
+  Ejemplo: encontrar una pistola funcional => {type:"item_add",target:"bow",amount:1,text:"Pistola Walther PPK"}. Encontrar un botiquín => target:"potion", text:"Botiquín de primeros auxilios".
+- Para objetos narrativos SIN estadísticas propias (llaves, documentos, fotografías, cartas, evidencias, recuerdos, etc.), item_add.target es el nombre real del objeto y item_add.text es una descripción breve.
 - Si entrega, consume, gasta, rompe, abandona, vende o pierde un objeto, usa item_remove con una cantidad válida. Nunca lo retires solo en prosa.
 - item_remove/item_rename solo pueden apuntar a un objeto que realmente exista. Usa preferentemente el id exacto recibido en character.inventory.
+- item_rename cambia solamente la identidad visible de un objeto mecánico ya existente; no altera sus estadísticas.
 - No concedas dos veces el mismo objeto por narración y efecto. La narración describe el hecho; el efecto cambia el estado.
 - Antes de afirmar "sacas", "usas", "enseñas", "entregas" o equivalentes, comprueba que ese objeto existe y hay cantidad suficiente. Si no existe, dilo naturalmente y deja al jugador buscar otra solución.
 - currency representa TODO cambio real de dinero. Comprar resta; cobrar/vender/recompensa suma. Nunca cambies dinero solo en prosa.
-- No conviertas equipo narrativo genérico en objetos infinitos. Herramientas básicas pueden justificar una acción si el inventario las contiene, pero consumibles, llaves, documentos, munición especial, medicinas y objetos únicos deben existir de forma explícita.
+- No conviertas equipo narrativo genérico en objetos infinitos. Consumibles, llaves, documentos, munición especial, medicinas y objetos únicos deben existir de forma explícita.
 
 MISIONES / OBJETIVOS
 - Las misiones viven en memory.entities con kind="quest". Son memoria persistente, no texto decorativo.
@@ -445,8 +471,9 @@ MEMORIA
 - privateMemory contiene secretos del Director, planes, verdades ocultas, identidades secretas y consecuencias todavía no reveladas. Conserva secretos previos y añade solo lo necesario. No reveles privateMemory en narrative.
 
 CONSULTAS DE ESTADO
-- Si lastEvent es una consulta sobre inventario, equipo, dinero, misiones/objetivos, ubicación, hora, estado físico o información evidente ya presente en el estado, responde usando EXCLUSIVAMENTE esos datos y devuelve check=null, encounter=null, combatIntent=null y effects=[].
-- Si preguntan "qué tengo", enumera solo character.inventory con cantidades reales; distingue weapon/armor equipados cuando corresponda. No reconstruyas inventario desde la narración.
+- Si lastEvent es una consulta sobre inventario, equipo, dinero, misiones/objetivos, ubicación, hora, estado físico o información evidente ya presente en el estado, responde usando EXCLUSIVAMENTE esos datos y devuelve check=null, encounter=null y combatIntent=null.
+- En una consulta de estado effects debe estar vacío SALVO item_rename estrictamente necesario para concretar marcadores genéricos del inventario. No cambies cantidades, dinero, XP, condiciones ni heridas por una simple consulta.
+- Si preguntan "qué tengo", enumera solo character.inventory con cantidades reales y usa equippedWeapon/equippedArmor para indicar qué objeto concreto está equipado. No reconstruyas inventario desde la narración.
 - Si preguntan por misiones, usa memory.entities kind="quest": indica activas y, si aporta valor, las completadas/fallidas/canceladas. No inventes objetivos que no estén registrados.
 - Nunca conviertas una pregunta informativa simple en una tirada.
 - Si falta un dato, dilo narrativamente sin inventar una prueba solo para obtenerlo.
@@ -522,6 +549,10 @@ function sanitizeEffects(effects,campaign) {
 
     if(e.type==="item_add") {
       if(e.amount<1 || e.amount>20 || !String(e.target||"").trim()) continue;
+      const catalogs=new Set(["longsword","rapier","bow","staff","mace","chain","scale","leather","potion","rations","tools","torch"]);
+      if(catalogs.has(e.target)) {
+        e.text=clip(String(e.text||"").trim()||e.target,100);
+      }
       out.push(e);
       continue;
     }
