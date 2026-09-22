@@ -1,5 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-22-rules-v11-director-resilience";
+const BUILD = "2026-09-22-rules-v12-director-latency";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -968,7 +968,7 @@ function modelResponseObject(result) {
   return null;
 }
 
-async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.5,top_p=0.9}) {
+async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.5,top_p=0.9,attempts=2,timeoutMs=22000}) {
   const request = {
     messages,
     response_format: { type:"json_schema", json_schema:schema },
@@ -978,13 +978,18 @@ async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.
     repetition_penalty: 1.05,
   };
   let firstError = null;
-  for (let attempt=0; attempt<2; attempt++) {
+  const totalAttempts = Math.max(1, Math.min(2, Number(attempts) || 1));
+  for (let attempt=0; attempt<totalAttempts; attempt++) {
     try {
-      const result = await env.AI.run(MODEL, {
+      const inference = env.AI.run(MODEL, {
         ...request,
         temperature: attempt === 0 ? temperature : 0.25,
         max_tokens: attempt === 0 ? max_tokens : Math.min(max_tokens,760),
       });
+      const result = await Promise.race([
+        inference,
+        new Promise((_,reject)=>setTimeout(()=>reject(new Error("AI_TIMEOUT")), Math.max(5000, Number(timeoutMs)||22000)))
+      ]);
       const parsed = modelResponseObject(result);
       if (parsed) return parsed;
       firstError ||= new Error("EMPTY_OR_INVALID_JSON");
@@ -1188,7 +1193,9 @@ Devuelve solo el JSON solicitado.`;
         schema:RESPONSE_SCHEMA,
         max_tokens:isOpening?1250:1100,
         temperature:isOpening?0.66:0.58,
-        top_p:0.91
+        top_p:0.91,
+        attempts:1,
+        timeoutMs:18000
       });
       let response = normalizeResponse(parsed,campaign);
       const semanticIssue = semanticProblem(response,campaign);
@@ -1203,7 +1210,9 @@ Devuelve solo el JSON solicitado.`;
           schema:RESPONSE_SCHEMA,
           max_tokens:1050,
           temperature:0.35,
-          top_p:0.86
+          top_p:0.86,
+          attempts:1,
+          timeoutMs:14000
         });
         response = normalizeResponse(parsed,campaign);
         const secondIssue=semanticProblem(response,campaign);
