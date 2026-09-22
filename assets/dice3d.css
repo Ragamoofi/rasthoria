@@ -1,0 +1,91 @@
+/*
+ * RASTHOR·IA — dados 3D
+ * Mejora visual progresiva: no altera azar, reglas, guardados ni resultados.
+ */
+.die-shape.ras-die3d-ready{
+  position:relative!important;
+  isolation:isolate;
+  overflow:visible!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  clip-path:none!important;
+  -webkit-clip-path:none!important;
+  transform:none;
+}
+.die-shape.ras-die3d-ready::before,
+.die-shape.ras-die3d-ready::after{
+  display:none!important;
+}
+.die-shape.ras-die3d-ready.is-rolling{
+  animation:none!important;
+  transform:none!important;
+  filter:none!important;
+}
+.die-shape.ras-die3d-ready>.die-icon{
+  opacity:0!important;
+}
+.die-shape.ras-die3d-ready>.ras-die3d-canvas{
+  position:absolute;
+  z-index:1;
+  left:-18%;
+  top:-18%;
+  width:136%!important;
+  height:136%!important;
+  display:block;
+  pointer-events:none;
+  filter:drop-shadow(0 12px 15px rgba(0,0,0,.42));
+}
+.die-shape.ras-die3d-ready.ras-die3d-double>.ras-die3d-canvas{
+  left:-34%;
+  width:168%!important;
+}
+.die-shape.ras-die3d-ready>span{
+  position:absolute!important;
+  z-index:3!important;
+  inset:0!important;
+  display:grid!important;
+  place-items:center!important;
+  color:#fff0cf!important;
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-weight:700!important;
+  font-variant-numeric:tabular-nums;
+  line-height:1!important;
+  text-shadow:0 2px 3px #000,0 0 12px rgba(255,205,130,.35)!important;
+  pointer-events:none;
+}
+.die-shape.ras-die3d-ready>small{
+  position:absolute!important;
+  z-index:4!important;
+  left:50%!important;
+  bottom:3%!important;
+  transform:translateX(-50%)!important;
+  color:#d7bc90!important;
+  letter-spacing:1.15px!important;
+  font-size:9px!important;
+  font-weight:700!important;
+  text-shadow:0 1px 3px #000!important;
+  pointer-events:none;
+}
+.die-shape.ras-die3d-ready.ras-die3d-double>span{
+  text-shadow:0 2px 3px #000,0 0 15px rgba(255,205,130,.46)!important;
+}
+.rolling-overlay .die-shape.ras-die3d-ready>.ras-die3d-canvas{
+  filter:drop-shadow(0 18px 20px rgba(0,0,0,.5));
+}
+.rolling-overlay .die-shape.ras-die3d-ready>span{
+  font-size:46px!important;
+}
+.pending-main .die-shape.ras-die3d-ready>span{
+  font-size:29px!important;
+}
+.dice-stage .die-shape.ras-die3d-ready>span{
+  font-size:37px!important;
+}
+@media (max-width:760px){
+  .rolling-overlay .die-shape.ras-die3d-ready>span{font-size:40px!important}
+  .dice-stage .die-shape.ras-die3d-ready>span{font-size:31px!important}
+}
+@media (prefers-reduced-motion:reduce){
+  .die-shape.ras-die3d-ready>.ras-die3d-canvas{transition:none!important}
+}

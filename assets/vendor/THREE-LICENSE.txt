@@ -1,0 +1,7 @@
+Three.js r160
+Copyright 2010-2023 Three.js Authors
+SPDX-License-Identifier: MIT
+
+This project vendors the minified ES module build of Three.js r160 solely for
+RASTHOR·IA's local dice renderer. The upstream source is available from the
+official three.js repository: https://github.com/mrdoob/three.js
