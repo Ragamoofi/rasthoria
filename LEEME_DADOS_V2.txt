@@ -1,0 +1,53 @@
+RASTHOR·IA — DADOS V2 · PRUEBA LOCAL
+=====================================
+
+Esta versión NO está subida a GitHub.
+Está preparada para probarla primero en tu PC y decidir después si hacer Commit + Push con GitHub Desktop.
+
+QUÉ CAMBIÓ
+----------
+- Se eliminó del juego el experimento visual anterior de dados.
+- Nueva tirada cinemática a pantalla completa.
+- D4, D6, D8, D10, D12, D20 y D100.
+- Los números están físicamente pegados a las caras del dado.
+- El resultado del motor se calcula primero y el dado visual termina mostrando ESA cara.
+  El sistema visual no altera el azar ni las reglas.
+- Rebotes, desplazamiento, giro, choques aproximados, sombras e iluminación.
+- Sonido corto de dados generado por el navegador, con botón para silenciarlo.
+- Ventaja/desventaja muestra dos D20 y al final atenúa el descartado.
+- D100 se representa como dos D10 (decenas + unidades).
+- 20 natural tiene presentación especial.
+- Se eliminó visualmente el antiguo "..." mientras se espera el resultado.
+
+PRUÉBALO ANTES DE JUGAR
+-----------------------
+Abre DADOS_LAB.html.
+
+Ahí puedes probar:
+D4 / D6 / D8 / D10 / D12 / D20 / D100
+20 natural
+1 natural
+Ventaja D20
+4D6 + 3
+
+Los botones del laboratorio fuerzan resultados concretos para verificar que la cara correcta queda arriba.
+No modifican ninguna campaña.
+
+PRUEBA EN EL JUEGO
+------------------
+Después abre index.html y prueba una campaña normalmente.
+Las tiradas narrativas usan exactamente el resultado criptográfico generado por RASTHOR·IA y la animación lo representa.
+
+GITHUB DESKTOP
+--------------
+La carpeta conserva .git y los cambios están SIN COMMIT.
+Al abrir esta carpeta en GitHub Desktop deberías ver solo el rework de dados:
+
+- index.html modificado
+- DADOS_LAB.html nuevo
+- assets/dice-arena.css nuevo
+- assets/dice-arena.js nuevo
+- assets/vendor/three-global-0.160.1.min.js nuevo
+- limpieza del experimento dice3d anterior
+
+No hagas Commit/Push hasta que los hayas probado y te gusten.

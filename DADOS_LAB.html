@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RASTHOR·IA · Laboratorio de Dados</title>
+<link rel="stylesheet" href="./assets/dice-arena.css?v=2">
+<style>
+html,body{min-height:100%;margin:0;background:#0d0d10;color:#eee;font-family:Inter,system-ui,sans-serif}
+body{display:grid;place-items:center;background:radial-gradient(circle at 50% 20%,#231b17,#0b0b0e 55%)}
+main{width:min(900px,calc(100vw - 32px));padding:34px;border:1px solid #3a3028;border-radius:16px;background:#131317;box-shadow:0 30px 80px #0009}
+h1{font-family:Georgia,serif;font-weight:500;color:#f3ddbd;letter-spacing:.05em;margin:0 0 8px}.muted{color:#998e82;margin:0 0 26px}.row{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.diebtn,.special{border:1px solid #5b4936;background:#201a17;color:#e7ca9c;border-radius:9px;padding:11px 16px;font:700 13px inherit;cursor:pointer}.diebtn:hover,.special:hover{border-color:#c3955c;background:#2a211c}.special{background:#181720;color:#cab6d9;border-color:#44394e}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}.card{border:1px solid #2b292d;border-radius:12px;padding:18px;background:#101014}.card h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#bba081;margin:0 0 12px}@media(max-width:700px){main{padding:22px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>RASTHOR·IA · Laboratorio de Dados</h1>
+  <p class="muted">Prueba el sistema visual sin entrar a una campaña. Cada botón fuerza el resultado indicado para verificar que el número queda físicamente arriba.</p>
+  <div class="card"><h2>Dados base</h2><div class="row">
+    <button class="diebtn" data-d="4">D4</button><button class="diebtn" data-d="6">D6</button><button class="diebtn" data-d="8">D8</button><button class="diebtn" data-d="10">D10</button><button class="diebtn" data-d="12">D12</button><button class="diebtn" data-d="20">D20</button><button class="diebtn" data-d="100">D100</button>
+  </div></div>
+  <div class="grid">
+    <div class="card"><h2>Momentos importantes</h2><div class="row"><button class="special" id="crit">D20 · 20 natural</button><button class="special" id="fumble">D20 · 1 natural</button></div></div>
+    <div class="card"><h2>Ventaja / varios dados</h2><div class="row"><button class="special" id="adv">Ventaja D20</button><button class="special" id="multi">4D6 + 3</button></div></div>
+  </div>
+</main>
+<script src="./assets/vendor/three-global-0.160.1.min.js"></script>
+<script src="./assets/dice-arena.js?v=2"></script>
+<script>
+for(const b of document.querySelectorAll('[data-d]')) b.onclick=()=>{const d=+b.dataset.d; RASTHORIA_DICE.test(d,d===100?73:Math.ceil(d*.7),1)};
+document.querySelector('#crit').onclick=()=>RASTHORIA_DICE.test(20,20,1,5);
+document.querySelector('#fumble').onclick=()=>RASTHORIA_DICE.test(20,1,1,5);
+document.querySelector('#adv').onclick=()=>RASTHORIA_DICE.roll({sides:20,count:1,values:[7,18],kept:[18],modifier:3,total:21,natural:18,advantage:'advantage',purpose:'Prueba de ventaja',success:true,critical:false,dc:15});
+document.querySelector('#multi').onclick=()=>RASTHORIA_DICE.roll({sides:6,count:4,values:[6,3,5,2],kept:[6,3,5,2],modifier:3,total:19,natural:null,advantage:'normal',purpose:'Daño de prueba',success:null,critical:false,dc:null});
+setTimeout(()=>{if(location.hash==='#auto20')document.querySelector('#crit').click();if(location.hash==='#auto100')document.querySelector('[data-d=\"100\"]').click();if(location.hash==='#autoadv')document.querySelector('#adv').click();},250);
+</script>
+</body></html>
