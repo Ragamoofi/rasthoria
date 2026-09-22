@@ -1,3 +1,4 @@
+import { mcpHandler } from "./mcp.js";
 const MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 const FALLBACK_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 const BUILD = "2026-09-22-rules-v16-multi-ai-byok";
@@ -1558,6 +1559,8 @@ async function testProvider(ai,env) {
 
 export default {
   async fetch(request, env) {
+    const urlForMcp = new URL(request.url);
+    if (urlForMcp.pathname === "/mcp") return mcpHandler.fetch(request);
     const origin = request.headers.get("Origin") || "";
     if (request.method === "OPTIONS") {
       if (origin && !isAllowedOrigin(origin)) return new Response(null,{status:403});
