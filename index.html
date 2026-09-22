@@ -271,6 +271,25 @@
 }
 </style>
 
+<style id="rasthoria-compact-scene-header-v1">
+/* Compacta la cabecera de escena para priorizar la lectura del chat. */
+.scene-banner{min-height:112px!important}
+.scene-content{padding:14px 28px 15px!important}
+.scene-content .eyebrow{font-size:8px!important;letter-spacing:1.7px!important}
+.scene-content h1{margin:6px 0 10px!important;font-size:24px!important;line-height:1.12!important}
+.scene-meta{gap:14px!important;font-size:11px!important}
+@media(max-width:1180px){
+  .scene-banner{min-height:104px!important}
+  .scene-content{padding:13px 22px 14px!important}
+  .scene-content h1{margin:5px 0 9px!important;font-size:22px!important}
+}
+@media(max-width:760px){
+  .scene-banner{min-height:96px!important}
+  .scene-content{padding:11px 16px 12px!important}
+  .scene-content h1{font-size:21px!important}
+  .scene-meta{gap:10px!important;font-size:10px!important}
+}
+</style>
 </head>
 <body>
 <div id="root"></div>
