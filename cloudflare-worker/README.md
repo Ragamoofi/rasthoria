@@ -1,34 +1,29 @@
-# RASTHOR·IA Cloud DM
+# RASTHOR·IA Cloud Narrator
 
-Backend del Director de Juego para RASTHOR·IA usando Cloudflare Workers AI y Llama 3.3 70B Fast.
+Backend del **Narrador** de RASTHOR·IA usando Cloudflare Workers AI y Llama 3.3 70B Fast.
 
 ## Cloudflare
 
 - Root directory: `cloudflare-worker`
-- Build command: vacío
-- Deploy command: `npm run deploy`
-- Worker name: `rasthoria-cloud-dm`
+- Main: `src/index.js`
+- AI binding: `AI`
+- Worker esperado: `rasthoria-cloud-dm`
 
-El Worker expone:
+## Endpoints
 
 - `GET /health`
 - `GET /api/connection`
+- `POST /api/random-campaign`
+- `POST /api/character-build`
 - `POST /api/gm`
 
-Después del primer deploy, abre una vez el juego con:
+## Resiliencia del Narrador
 
-`https://ragamoofi.github.io/rasthoria/?api=https://TU-WORKER.workers.dev`
+La versión v13 está pensada para que la campaña no se congele si Workers AI tarda o devuelve JSON imperfecto.
 
-El endpoint queda guardado localmente y el parámetro `api` desaparece de la URL.
-
-## Resiliencia del Director
-
-El turno se guarda antes de consultar al Director. Para evitar esperas largas,
-`/api/gm` limita la generación principal a una llamada de modelo con tiempo
-máximo y, solo si la salida viola una regla semántica, permite una reparación
-adicional más corta. Si Workers AI falla o se demora demasiado, el Worker usa
-la respuesta de emergencia del motor sin perder el estado.
-
-El frontend crea un AbortController nuevo por reintento. Si ambos intentos de
-red fallan, conserva `awaiting_gm`: **Retomar la escena** solicita el mismo
-turno ya guardado en lugar de obligar a escribir la acción otra vez.
+- La respuesta principal intenta salida estructurada y después una recuperación JSON flexible.
+- El generador de campañas y el constructor de personaje tienen fallback y no deberían bloquear la creación por una caída temporal del modelo.
+- El turno del jugador se conserva si la IA no responde.
+- Preguntas y roleo normal continúan sin obligar una tirada D20.
+- El D20 se exige cuando hay incertidumbre, riesgo, oposición o una tarea que realmente lo justifique.
+- Se aceptan GitHub Pages y los orígenes locales usados para pruebas (`file://`, `localhost`, `127.0.0.1`).

@@ -2,26 +2,32 @@
 
 **Tu historia aún no ha sido escrita.**
 
-RPG narrativo dinámico dirigido por IA, con motor de dados, campañas libres, memoria persistente y consecuencias reales.
+RPG narrativo dinámico con campañas libres, memoria persistente, consecuencias, combate d20 y un Narrador IA en la nube.
 
-## Base actual
+## Archivos principales
 
-La interfaz y el motor principal fueron recuperados desde la versión original de **Umbral** generada en ChatGPT Sites y migrados a RASTHOR·IA.
+- `index.html` — juego web autocontenido.
+- `assets/dice-roulette.css` — aspecto visual de los dados tipo ruleta interna.
+- `assets/dice-roulette.js` — animación de números y sincronización con el resultado real del motor.
+- `DADOS_RULETA_LAB.html` — laboratorio visual para probar D4, D6, D8, D10, D12, D20, ventaja y varias tiradas.
+- `cloudflare-worker/` — backend del Narrador mediante Cloudflare Workers AI.
 
-- `index.html` — versión web autocontenida del juego.
-- `cloudflare-worker/` — Director de Juego en la nube mediante Cloudflare Workers AI + Qwen3 30B-A3B.
-- Guardados locales mediante IndexedDB.
-- Motor propio para dados, combate, iniciativa, HP, condiciones, inventario y progresión.
-
-Los jugadores no necesitan iniciar sesión en ChatGPT, pegar una API key, activar WebGPU ni descargar modelos.
-
-RASTHOR·IA es un proyecto completamente independiente de PokéSenda.
-
-
-## Director IA en la nube
+## Narrador IA
 
 Worker de producción:
 
 `https://rasthoria-cloud-dm.o-sariego.workers.dev`
 
-RASTHOR·IA usa este servicio automáticamente. Los jugadores no necesitan cuenta, clave API, descargar modelos ni activar aceleración gráfica.
+Modelo actual: **Llama 3.3 70B Fast** mediante Workers AI.
+
+La versión v13 del Worker añade:
+
+- compatibilidad con pruebas locales (`file://`, localhost y 127.0.0.1);
+- generación de campaña con dos rutas de IA y un fallback para no bloquear la creación;
+- creación de ficha con fallback;
+- respuestas del Narrador con salida estructurada y recuperación JSON flexible;
+- roleo y preguntas normales sin tiradas D20 obligatorias;
+- D20 reservado para incertidumbre, riesgo, oposición o tareas realmente resolubles por dados;
+- recuperación segura del turno cuando el modelo no responde.
+
+Los jugadores no necesitan iniciar sesión en ChatGPT ni pegar una API key.

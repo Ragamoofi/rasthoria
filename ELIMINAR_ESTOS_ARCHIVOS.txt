@@ -1,0 +1,8 @@
+El sistema 3D anterior ya no se usa. Elimina de tu copia local:
+
+assets/dice3d.css
+assets/dice3d.js
+assets/vendor/THREE-LICENSE.txt
+assets/vendor/three-0.160.1.min.js
+
+Si assets/vendor queda vacío, puedes eliminar la carpeta vendor.

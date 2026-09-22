@@ -1,9 +1,21 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-22-rules-v12-director-latency";
+const BUILD = "2026-09-22-rules-v13-narrador-resilience";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
 ]);
+
+function isAllowedOrigin(origin) {
+  if (!origin || origin === "null") return true; // file:// local testing
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    return (url.protocol === "http:" || url.protocol === "https:")
+      && ["localhost","127.0.0.1","::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 const EFFECT_SCHEMA = {
   type: "object",
@@ -182,7 +194,7 @@ const RESPONSE_SCHEMA = {
 };
 
 function cors(origin) {
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://ragamoofi.github.io";
+  const allowed = origin === "null" ? "null" : (origin && isAllowedOrigin(origin) ? origin : "https://ragamoofi.github.io");
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -364,7 +376,7 @@ function publicCampaign(campaign) {
   };
 }
 
-const SYSTEM = `Eres el Director de Juego de RASTHOR·IA, un RPG narrativo reactivo inspirado en d20/SRD 5e. Tu respuesta NO es texto libre: debe cumplir exactamente el JSON solicitado.
+const SYSTEM = `Eres el Narrador de Juego de RASTHOR·IA, un RPG narrativo reactivo inspirado en d20/SRD 5e. Tu respuesta NO es texto libre: debe cumplir exactamente el JSON solicitado.
 
 OBJETIVO
 Crear una campaña viva, coherente, impredecible y con consecuencias persistentes. El usuario puede proponer LITERALMENTE cualquier género, época, universo o escala: vida cotidiana, drama, deportes, crimen, terror, western, histórico, cyberpunk, ciencia ficción, superhéroes, romance, fantasía o mezclas propias. Adáptate sin imponer fantasía medieval si no corresponde.
@@ -384,31 +396,31 @@ AUTORIDAD
 - No inventes una tirada ya realizada ni cambies su resultado.
 - Si el motor informa éxito, narra éxito; si informa fracaso, narra fracaso y sus consecuencias.
 
-TIRADAS — REGLA CENTRAL D20 / RASTHOR·IA
-- RASTHOR·IA usa una variante deliberadamente MÁS cargada de dados que una mesa estándar de D&D: toda acción o decisión del personaje declarada dentro del mundo y que haga avanzar la ficción debe desembocar en al menos una tirada antes de que cierres sus consecuencias.
-- La tirada base para resolver si una acción sale bien, mal o con complicaciones es SIEMPRE un D20 Test: ability check, saving throw o attack roll. El tipo de acción NO cambia el tamaño del dado de resolución. Los D4/D6/D8/D10/D12 se reservan para daño, curación, recursos o efectos que explícitamente los usen.
-- No resuelvas por pura narración una acción del jugador y luego sigas adelante. Primero describe solo el intento, preparación o tensión; devuelve check; el motor bloqueará la historia hasta que el jugador tire.
-- Para acciones sencillas que en D&D normal quizá no pedirían prueba, la tirada puede decidir la CALIDAD, COSTE, TIEMPO, INFORMACIÓN, EXPOSICIÓN o COMPLICACIÓN, en vez de impedir absurdamente la acción básica. Ejemplo: "entro al club" puede ocurrir, pero un check de Percepción/Perspicacia decide qué detecta al entrar; "busco munición" requiere Investigación y solo después se determina si encuentra algo y a qué coste.
-- Si el jugador escribe varias acciones en un mismo mensaje, resuelve primero la primera acción significativa que requiera tirada y detente. No encadenes resultados de varias acciones antes del dado.
-- EXCEPCIÓN: consultas puramente informativas o de estado como "¿qué llevo?", "¿qué tengo encima?", "¿dónde estoy?", "¿qué hora es?", "¿cómo estoy?" o equivalentes no requieren tirada porque no son una acción del personaje que avance la ficción.
-- EXCEPCIÓN: una declaración hostil que inicia combate no usa un ability check previo; crea encounter y deja que el motor obligue iniciativa, ataque y daño con sus dados correspondientes.
-- Usa ability check cuando el personaje actúa: Fuerza/Atletismo para esfuerzo físico, Destreza/Acrobacias o Sigilo para precisión/movimiento oculto, Inteligencia/Investigación y conocimientos para deducir, buscar o estudiar, Sabiduría/Percepción-Perspicacia-Supervivencia para percibir o leer situaciones, Carisma/Engaño-Intimidación-Persuasión-Interpretación para influir en otros.
-- Usa save cuando el personaje REACCIONA o RESISTE un peligro/efecto que ya le está ocurriendo: explosión, veneno, caída, miedo, derrumbe, trampa, etc. Las salvaciones usan skill=null.
-- Información oculta, buscar objetos o recursos, registrar un lugar, seguir pistas, escuchar detrás de una puerta, leer intenciones o detectar peligros deben usar Percepción, Investigación o Perspicacia según corresponda.
-- Sigilo, infiltración, robo, persecución, obstáculos físicos, tareas técnicas, conducción bajo presión, negociación, mentira, intimidación y cualquier intento con oposición requieren D20.
-- Incluso una acción social aparentemente simple debe tirar si con ella avanza la escena: el D20 puede medir primera impresión, lectura del interlocutor, calidad de la interacción o complicaciones, sin obligar a convertir un saludo en algo absurdo.
-- DC orientativa: 5 muy fácil, 10 fácil, 15 moderada, 20 difícil, 25 muy difícil, 30 casi imposible. En la regla de RASTHOR·IA puedes usar DC 5 para acciones muy sencillas cuya tirada mide calidad o complicación.
-- Ventaja/desventaja se usa por circunstancias claras del mundo, preparación, ayuda, posición, condiciones o herramientas; no para manipular el resultado deseado.
+TIRADAS — CUÁNDO USAR D20
+- Los dados aparecen cuando existe incertidumbre real, riesgo, oposición, presión o una consecuencia interesante. No conviertas cada frase o gesto en una tirada.
+- La tirada base para resolver una acción incierta es un D20 Test: ability check, saving throw o attack roll. Los D4/D6/D8/D10/D12 se reservan para daño, curación, recursos o efectos que explícitamente los usen.
+- ROLEO LIBRE: hablar, preguntar, responder, bromear, saludar, presentarse, expresar una opinión, mirar algo evidente, caminar por un lugar seguro o realizar una acción cotidiana sin presión NO requiere tirada por defecto. Deja que la escena y los NPC respondan naturalmente.
+- Una conversación solo requiere Carisma cuando el personaje intenta CAMBIAR una decisión, engañar, intimidar, seducir con un objetivo concreto, negociar algo disputado o vencer resistencia social significativa. Una pregunta normal a un NPC no exige Persuasión.
+- Una acción física o técnica solo requiere tirada cuando puede fallar de forma significativa, existe oposición, falta tiempo, hay peligro o el resultado aporta información no evidente.
+- Información oculta, registrar un lugar, seguir pistas, escuchar detrás de una puerta, leer intenciones o detectar peligros pueden usar Percepción, Investigación o Perspicacia según corresponda.
+- Sigilo, infiltración, robo, persecución, obstáculos difíciles, tareas técnicas bajo presión, conducción peligrosa, negociación disputada, mentira e intimidación normalmente requieren D20.
+- Si una acción es automática o trivial en la situación, resuélvela narrativamente y continúa. No inventes una complicación solo para justificar un dado.
+- Si el jugador escribe varias acciones, resuelve en orden y detente únicamente cuando aparezca la primera que realmente necesite una tirada.
+- Consultas de estado como "¿qué llevo?", "¿dónde estoy?", "¿qué hora es?", "¿cómo estoy?" o preguntas sobre algo ya visible/conocido nunca requieren tirada.
+- Una declaración hostil que inicia combate no usa un ability check previo; crea encounter y deja que el motor resuelva iniciativa, ataque y daño.
+- Usa save cuando el personaje REACCIONA o RESISTE un peligro/efecto que ya le está ocurriendo. Las salvaciones usan skill=null.
+- DC orientativa: 5 muy fácil, 10 fácil, 15 moderada, 20 difícil, 25 muy difícil, 30 casi imposible. No pidas una prueba DC 5 si sencillamente no hay nada interesante en juego.
+- Ventaja/desventaja se usa por circunstancias claras del mundo, preparación, ayuda, posición, condiciones o herramientas.
 - skill debe corresponder a ability. Si ninguna habilidad aplica, usa skill=null con la característica correcta.
 - Si solicitas check, detén la narración ANTES de saber si funciona: effects debe estar vacío salvo item_rename y encounter debe ser null; las consecuencias mecánicas van en success/failure y la historia continuará después del resultado.
-- Un fracaso no tiene por qué bloquear la aventura. Favorece fallo con consecuencia cuando sea apropiado: pérdida de tiempo, ruido, sospecha, posición peor, recurso gastado, información incompleta, oportunidad perdida o peligro nuevo.
-- REGLA DE BLOQUEO: jamás continúes la ficción más allá de una acción declarada si esa acción debía generar tirada y todavía no existe resultado del motor.
+- Un fracaso no tiene por qué bloquear la aventura. Favorece fallo con consecuencia cuando sea apropiado.
+- Nunca uses un dado para evitar responder una pregunta o sostener un intercambio de roleo que puede continuar de forma natural.
 
 COMBATE — FLUJO DE MESA POR TEXTO
 - El combate se juega principalmente escribiendo en lenguaje natural, como en una mesa de rol. El jugador describe lo que intenta hacer; NO necesita elegir una acción desde un menú táctico.
 - Solo crea encounter cuando la situación realmente inicia combate. Debe incluir al menos un enemy.
 - Al comenzar un enfrentamiento, el motor resuelve iniciativa: 1D20 + Destreza. El total más alto actúa primero.
-- Un ataque normal se resuelve en DOS pasos mecánicos: primero 1D20 + modificador de ataque contra la CA del objetivo; si impacta, después se tira el dado de daño del arma + su modificador. El Director nunca debe inventar esos números.
+- Un ataque normal se resuelve en DOS pasos mecánicos: primero 1D20 + modificador de ataque contra la CA del objetivo; si impacta, después se tira el dado de daño del arma + su modificador. El Narrador nunca debe inventar esos números.
 - En un ataque, un 20 natural es crítico y duplica los dados de daño; un 1 natural falla. El resto compara TOTAL (d20 + modificador) contra la CA.
 - Maniobras creativas escritas durante combate (engañar, empujar, ocultarse, desarmar, intimidar, buscar cobertura, etc.) pueden usar una prueba d20 apropiada. Explica la intención en reason con lenguaje concreto.
 - El jugador puede escribir cosas como "le disparo a J", "me escondo tras la barra", "intento desarmarlo", "corro hacia la puerta" o "termino mi turno". Interpreta la intención; los dados y el motor determinan el resultado.
@@ -470,7 +482,7 @@ EFECTOS
 - XP fuera de combate debe ser moderada y justificada.
 
 NARRACIÓN
-- Escribe como un buen novelista y Director de Juego, no como un asistente que resume información.
+- Escribe como un buen novelista y Narrador de Juego, no como un asistente que resume información.
 - Español natural, elegante, inmersivo y fácil de leer. Busca belleza y atmósfera sin caer en prosa recargada.
 - Haz que el jugador SIENTA dónde está: usa de 2 a 5 detalles sensoriales concretos por escena cuando aporten algo (luz, sonido, olor, temperatura, textura, distancia, movimiento, clima, arquitectura, multitudes, silencio).
 - "Muestra" antes que explicar: una sala no es "tensa"; alguien aprieta un vaso, un ventilador vibra, nadie mira a nadie. Un lugar no es "futurista"; describe qué lo vuelve futurista.
@@ -507,7 +519,7 @@ MEMORIA
 - flags guarda hechos simples útiles para lógica futura.
 - elapsedMinutes debe reflejar el tiempo narrativo razonable transcurrido este turno; durante combate normalmente 0.
 - location cambia solo cuando realmente cambia la ubicación.
-- privateMemory contiene secretos del Director, planes, verdades ocultas, identidades secretas y consecuencias todavía no reveladas. Conserva secretos previos y añade solo lo necesario. No reveles privateMemory en narrative.
+- privateMemory contiene secretos del Narrador, planes, verdades ocultas, identidades secretas y consecuencias todavía no reveladas. Conserva secretos previos y añade solo lo necesario. No reveles privateMemory en narrative.
 
 CONSULTAS DE ESTADO
 - Si lastEvent es una consulta sobre inventario, equipo, dinero, misiones/objetivos, ubicación, hora, estado físico o información evidente ya presente en el estado, responde usando EXCLUSIVAMENTE esos datos y devuelve check=null, encounter=null y combatIntent=null.
@@ -715,9 +727,16 @@ function isHostileDeclaration(campaign) {
   if (campaign?.combat) return false;
   const action=plainText(declaredAction(campaign));
   if (!action) return false;
-  const hostile=/\b(mato|matar|matand|asesin|apunal|acuchill|degoll|decapit|corto la cabeza|cortar la cabeza|le corto|lo corto|dispar|tiro a matar|golpeo|pego|ataco|embisto|estrangul|ahorc|rompo el cuello|atravies|clavo (?:la|el|mi)|hiero|herir)\b/i.test(action);
+  const hostile=/\b(?:mato|matar|matand\w*|asesin\w*|apunal\w*|acuchill\w*|degoll\w*|decapit\w*|corto la cabeza|cortar la cabeza|le corto|lo corto|dispar\w*|tiro a matar|golpe\w*|pego|ataco|embisto|estrangul\w*|ahorc\w*|rompo el cuello|atravies\w*|clavo (?:la|el|mi)|hiero|herir)\b/i.test(action);
   const harmless=/\b(mato el tiempo|me mata de risa|muerto de risa)\b/i.test(action);
   return hostile && !harmless;
+}
+
+function hostileTargetName(campaign) {
+  const action=plainText(declaredAction(campaign));
+  const entities=Array.isArray(campaign?.memory?.entities)?campaign.memory.entities:[];
+  const hit=entities.find(e=>e?.kind==="npc" && e?.name && action.includes(plainText(e.name)));
+  return hit?.name || "Adversario";
 }
 
 function narrativeClaimsResolvedViolence(narrative) {
@@ -751,47 +770,58 @@ function isInventoryDeclaration(campaign) {
   return /\b(que tengo|que llevo|inventario|bolsillo|bolsillos|mochila|pertenencias|equipo llevo|reviso mi equipo|reviso mis cosas)\b/.test(action);
 }
 
-function isInformationalOrTrivialDeclaration(campaign) {
-  const action=plainText(declaredAction(campaign)).trim();
-  if (!action) return true;
+function normalizedDeclaration(campaign) {
+  return plainText(declaredAction(campaign)).trim().replace(/^[\s¿?¡!()\[\]{}"'.,;:—–-]+/,"");
+}
 
-  // Solo consultas puramente informativas quedan fuera del bloqueo de dados.
-  // Las acciones "triviales" dentro del mundo también tiran en RASTHOR·IA:
-  // el dado mide calidad, información, tiempo, exposición o complicación.
-  return /^(?:que|qué|cual|cuál|cuanto|cuánto|donde|dónde|como|cómo|tengo|llevo|mi inventario|inventario|estado|hora)\b/.test(action)
-    || /\b(que llevo|que tengo|donde estoy|que hora|como estoy|mi inventario|reviso (?:mi )?(?:inventario|mochila|equipo))\b/.test(action);
+function isInformationalOrTrivialDeclaration(campaign) {
+  const action=normalizedDeclaration(campaign);
+  if (!action) return true;
+  if (/^(?:que|cual|cuanto|donde|como|quien|cuando|por que|para que|tengo|llevo|mi inventario|inventario|estado|hora)\b/.test(action)) return true;
+  return /\b(que llevo|que tengo|donde estoy|que hora|como estoy|mi inventario|reviso (?:mi )?(?:inventario|mochila|equipo)|que veo|que escucho a simple vista|quien esta aqui)\b/.test(action);
+}
+
+function isOrdinaryRoleplayDeclaration(campaign) {
+  const action=normalizedDeclaration(campaign);
+  if (!action) return true;
+  // Conversación o gestos que no expresan un intento explícito de vencer resistencia.
+  const socialPressure=/\b(?:convenc\w*|persuad\w*|negoci\w*|regate\w*|soborn\w*|intimid\w*|amenaz\w*|mient\w*|engan\w*|seduc\w*|manipul\w*|provoc\w*|interrog\w*|oblig\w*|presion\w*)\b/.test(action);
+  if (socialPressure) return false;
+  if (/^(?:digo|le digo|les digo|pregunto|le pregunto|les pregunto|respondo|contesto|saludo|me presento|agradezco|bromeo|rio|me rio|sonrio|susurro|grito|hablo|le hablo|converso|comento|explico|cuento|escucho|asiento|niego|me callo|guardo silencio)\b/.test(action)) return true;
+  if (/\b(?:le digo|le pregunto|les pregunto|le respondo|hablo con|converso con|saludo a|me presento ante)\b/.test(action)) return true;
+  return false;
 }
 
 function actionLikelyNeedsD20(campaign) {
   if (campaign?.combat || campaign?.pending) return false;
-  const action=plainText(declaredAction(campaign)).trim();
-  if (!action || isInformationalOrTrivialDeclaration(campaign) || isHostileDeclaration(campaign)) return false;
+  const action=normalizedDeclaration(campaign);
+  if (!action || isInformationalOrTrivialDeclaration(campaign) || isOrdinaryRoleplayDeclaration(campaign) || isHostileDeclaration(campaign)) return false;
 
-  // Regla Dice-First de RASTHOR·IA: toda acción declarada en el mundo
-  // que avance la ficción debe generar una tirada antes de resolverse.
-  return true;
+  // Solo exigimos mecánicamente un D20 cuando el texto declara algo claramente incierto,
+  // arriesgado, opuesto o técnico. El Narrador aún puede pedir una prueba en otros casos
+  // si el estado del mundo justifica incertidumbre real.
+  return /\b(?:busc\w*|registr\w*|investig\w*|examin\w*|inspeccion\w*|descifr\w*|hack\w*|forz\w*|cerradura\w*|ganzua\w*|rob\w*|hurt\w*|sigilo|escond\w*|infiltr\w*|persig\w*|escap\w*|huir|trep\w*|escal\w*|salt\w*|equilibr\w*|acrob\w*|empuj\w*|derrib\w*|levant\w*|romp\w*|desarm\w*|repar\w*|desactiv\w*|conduz\w*|manej\w*|pilot\w*|nad\w*|sobreviv\w*|rastreo|rastre\w*|sigo huellas|detect\w*|acech\w*|convenc\w*|persuad\w*|negoci\w*|regate\w*|soborn\w*|intimid\w*|amenaz\w*|mient\w*|engan\w*|seduc\w*|manipul\w*|provoc\w*|interrog\w*|oblig\w*|presion\w*|apuest\w*|compit\w*)\b/.test(action);
 }
 
 function combatPlayerActionLikelyNeedsD20(campaign) {
   if (!campaign?.combat || campaign?.pending) return false;
   const currentId=campaign.combat?.order?.[campaign.combat?.index]?.id;
   if (currentId!=="player") return false;
-  const action=plainText(declaredAction(campaign)).trim();
-  if (!action) return false;
+  const action=normalizedDeclaration(campaign);
+  if (!action || isInformationalOrTrivialDeclaration(campaign) || isOrdinaryRoleplayDeclaration(campaign)) return false;
 
   // Ataques normales los resuelve el motor con attack roll + damage roll.
-  if (/\b(dispar|ataco|golpeo|pego|apunal|acuchill|degoll|decapit|mato|matar|hiero|herir|embisto|estrangul|corto con|clavo)\b/.test(action)) return false;
+  if (/\b(?:dispar\w*|atac\w*|golpe\w*|pego|apunal\w*|acuchill\w*|degoll\w*|decapit\w*|mato|matar|hiero|herir|embisto|estrangul\w*|corto con|clavo)\b/.test(action)) return false;
 
-  // Cualquier otra maniobra creativa que llegó al Director requiere D20.
-  return true;
+  return /\b(?:escond\w*|sigilo|empuj\w*|derrib\w*|desarm\w*|intimid\w*|engan\w*|mient\w*|forz\w*|trep\w*|salt\w*|equilibr\w*|escap\w*|huir|corro hacia|busco cobertura|me cubro|agarr\w*|arrebat\w*|interpon\w*|protej\w*)\b/.test(action);
 }
 
 function fallbackCheckForDeclaredAction(campaign) {
   const action=plainText(declaredAction(campaign)).trim();
   let ability="WIS", skill="perception", dc=10, reason="Resolver la acción declarada";
-  if (/\b(convenc|persuad|negoci|dialog|hablo|digo|pregunto|seduc)\b/.test(action)) { ability="CHA"; skill="persuasion"; dc=10; reason="Influir en la reacción del interlocutor"; }
-  else if (/\b(intimid|amenaz|asust)\b/.test(action)) { ability="CHA"; skill="intimidation"; dc=10; reason="Imponer presión o intimidar"; }
-  else if (/\b(mient|engañ|engaño|finjo|disfraz)\b/.test(action)) { ability="CHA"; skill="deception"; dc=12; reason="Engañar sin ser descubierto"; }
+  if (/\b(?:convenc\w*|persuad\w*|negoci\w*|dialog\w*|hablo|digo|pregunto|seduc\w*)\b/.test(action)) { ability="CHA"; skill="persuasion"; dc=10; reason="Influir en la reacción del interlocutor"; }
+  else if (/\b(?:intimid\w*|amenaz\w*|asust\w*)\b/.test(action)) { ability="CHA"; skill="intimidation"; dc=10; reason="Imponer presión o intimidar"; }
+  else if (/\b(?:mient\w*|engan\w*|finjo|disfraz\w*)\b/.test(action)) { ability="CHA"; skill="deception"; dc=12; reason="Engañar sin ser descubierto"; }
   else if (/\b(busco|investig|registro|examino|inspeccion|pista|municion|munición)\b/.test(action)) { ability="INT"; skill="investigation"; dc=10; reason="Buscar y obtener información o recursos"; }
   else if (/\b(observo|miro|escucho|vigilo|detecto|percib)\b/.test(action)) { ability="WIS"; skill="perception"; dc=10; reason="Percibir detalles relevantes de la escena"; }
   else if (/\b(sigilo|escond|infiltr|sin que me vean|paso desapercib)\b/.test(action)) { ability="DEX"; skill="stealth"; dc=12; reason="Actuar sin ser detectado"; }
@@ -834,19 +864,12 @@ function semanticProblem(response,campaign) {
   if (actionLikelyNeedsD20(campaign) && !response.check && !response.encounter?.length) {
     return "Regla Dice-First: toda acción del personaje que avance la ficción debe generar una prueba D20 antes de resolver sus consecuencias. Devuelve check y detén la narración antes del resultado.";
   }
-  if (isInformationalOrTrivialDeclaration(campaign) && response.check) {
-    return "La entrada es una consulta puramente informativa de estado y no justifica una tirada. Responde usando el estado recibido.";
+  if ((isInformationalOrTrivialDeclaration(campaign) || isOrdinaryRoleplayDeclaration(campaign)) && response.check) {
+    return "La entrada es una pregunta, conversación o roleo normal sin oposición significativa y no justifica una tirada. Responde y deja que la escena continúe naturalmente.";
   }
 
-  const generic=genericInventoryItems(campaign);
-  const opening=Number(campaign?.revision||0)<=1 && (Array.isArray(campaign?.messages)?campaign.messages.length:0)<=3;
-  if (generic.length && (opening || isInventoryDeclaration(campaign))) {
-    const renamed=new Set((response.effects||[]).filter(e=>e?.type==="item_rename").map(e=>e.target));
-    const missing=generic.filter(i=>!renamed.has(i.id));
-    if (missing.length) {
-      return "El inventario todavía contiene nombres genéricos. Concreta todos esos objetos con item_rename antes de describir qué lleva el personaje: "+missing.map(i=>i.name).join(", ")+".";
-    }
-  }
+  // Los nombres genéricos de inventario son una mejora de presentación, no una razón
+  // para rechazar un turno narrativo completo. El prompt sigue pidiendo concretarlos.
   return "";
 }
 
@@ -892,11 +915,11 @@ function normalizeResponse(raw, campaign) {
   return out;
 }
 
-function emergencyDirectorResponse(campaign) {
+function emergencyNarradorResponse(campaign) {
   const combat=campaign?.combat||null;
   const currentId=combat?.order?.[combat?.index]?.id||null;
-  let narrative=[{kind:"narrator",speaker:"",text:"El Director tarda un instante en responder, pero el estado de la partida permanece intacto."}];
-  let check=null, combatIntent=null;
+  let narrative=[{kind:"narrator",speaker:"",text:"El Narrador tarda un instante en responder, pero el estado de la partida permanece intacto."}];
+  let check=null, combatIntent=null, encounter=null;
 
   if (combat && currentId==="player") {
     narrative=[{kind:"narrator",speaker:"",text:"Es tu turno. La situación sigue exactamente donde quedó; describe lo que intentas hacer y los dados resolverán la acción."}];
@@ -913,6 +936,9 @@ function emergencyDirectorResponse(campaign) {
         narrative=[{kind:"narrator",speaker:"",text:`${actor.name||"Tu aliado"} toma la iniciativa contra ${target.name}. El motor resolverá el ataque.`}];
       } else combatIntent={actor:currentId,action:"dodge",target:null};
     }
+  } else if (isHostileDeclaration(campaign)) {
+    encounter=[{name:hostileTargetName(campaign),profile:"skirmisher",side:"enemy",tactic:"Reaccionar al ataque, buscar cobertura y defenderse.",entityId:null,distance:3}];
+    narrative=[{kind:"narrator",speaker:"",text:"Tu movimiento hostil rompe la calma. El objetivo reacciona de inmediato; la iniciativa decidirá quién logra actuar primero."}];
   } else if (actionLikelyNeedsD20(campaign)) {
     check=fallbackCheckForDeclaredAction(campaign);
     narrative=[{kind:"narrator",speaker:"",text:"Tu intención queda planteada. Antes de conocer el resultado, la situación depende de una tirada."}];
@@ -923,7 +949,7 @@ function emergencyDirectorResponse(campaign) {
     narrative,
     check,
     effects:[],
-    encounter:null,
+    encounter,
     combatIntent,
     memory:{
       summary:campaign?.memory?.summary||"",
@@ -1000,14 +1026,76 @@ async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.
   throw firstError || new Error("STRUCTURED_OUTPUT_FAILED");
 }
 
+
+async function runLooseJSON(env, {messages,max_tokens=900,temperature=0.45,top_p=0.9,timeoutMs=10000}) {
+  const inference = env.AI.run(MODEL, {
+    messages:[
+      ...messages,
+      {role:"system",content:"Devuelve exclusivamente un único objeto JSON válido. No uses markdown, comentarios ni texto fuera del JSON."}
+    ],
+    max_tokens,
+    temperature,
+    top_p,
+    repetition_penalty:1.04,
+  });
+  const result = await Promise.race([
+    inference,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error("AI_TIMEOUT_LOOSE")), Math.max(5000,Number(timeoutMs)||10000)))
+  ]);
+  const parsed=modelResponseObject(result);
+  if(!parsed) throw new Error("LOOSE_JSON_FAILED");
+  return parsed;
+}
+
+function fallbackRandomCampaign(seed,prefs={}) {
+  const ideas=[
+    {genre:"Misterio contemporáneo",setting:"Santiago bajo una lluvia fuera de temporada",era:"Actualidad",tone:"Tenso, humano y callejero",fantasy:"Baja o incierta",premise:"Una noche, todas las pantallas de una estación de Metro muestran durante once segundos el mismo video: tú entrando a un edificio que nunca has visitado. A la mañana siguiente, una desconocida te reconoce por ese registro y asegura que alguien desapareció allí. Nadie más parece conservar la grabación.",themes:"identidad, vigilancia, confianza, ciudad, secretos"},
+    {genre:"Ciencia ficción",setting:"Puerto orbital de carga en el borde del sistema",era:"Siglo XXIV",tone:"Aventura sucia con humor y peligro",fantasy:"Tecnología avanzada",premise:"Tu turno de trabajo debía terminar con una inspección rutinaria, pero un contenedor sin propietario empieza a transmitir una señal usando tu nombre. La aduana quiere abrirlo, una tripulación rival ofrece pagarte por hacerlo desaparecer y el manifiesto oficial dice que ese contenedor no existe.",themes:"lealtad, dinero, tecnología, supervivencia"},
+    {genre:"Drama criminal",setting:"Barrio costero donde todos se conocen",era:"Actualidad",tone:"Realista, íntimo y peligroso",fantasy:"Ninguna",premise:"Un amigo de años deja una mochila en tu casa y te pide que no la abras hasta mañana. Esa misma noche desaparece. Antes del amanecer llegan tres personas distintas preguntando por él, cada una con una versión incompatible de lo ocurrido.",themes:"amistad, deuda, mentira, consecuencias"},
+    {genre:"Horror",setting:"Hotel cordillerano aislado por una tormenta",era:"Actualidad",tone:"Inquietante y progresivo",fantasy:"Ambigua",premise:"La carretera queda cortada y los huéspedes aceptan pasar la noche. A las 02:17, el teléfono de cada habitación suena al mismo tiempo. Al contestar, todos oyen su propia voz diciendo una frase diferente. La tuya menciona algo que nunca le contaste a nadie.",themes:"aislamiento, memoria, paranoia, verdad"},
+    {genre:"Aventura deportiva",setting:"Circuito clandestino de carreras urbanas",era:"Actualidad",tone:"Enérgico, competitivo y humano",fantasy:"Ninguna",premise:"Llegas como reemplazo de última hora a una carrera que puede cambiar la temporada de tu equipo. Antes de partir descubres que el auto del favorito fue manipulado y que alguien dejó la misma pieza defectuosa dentro de tu bolso. Si denuncias, quizá suspendan la carrera; si callas, alguien puede terminar herido.",themes:"competencia, reputación, equipo, riesgo"},
+    {genre:"Superhéroes",setting:"Ciudad moderna tres meses después de las primeras personas con poderes",era:"Actualidad alternativa",tone:"Crudo, impredecible y personal",fantasy:"Poderes recientes",premise:"Tu habilidad apareció en el peor momento posible y nadie sabe que la tienes. Esta mañana un video viral muestra a otra persona usando un poder idéntico al tuyo durante un delito. La policía publica una recompensa mientras alguien deja bajo tu puerta una nota: «Sé que ese no eras tú».",themes:"identidad, poder, miedo público, responsabilidad"}
+  ];
+  if (seed && seed.trim().length>20) {
+    return {
+      premise:`${seed.trim()} La historia comienza en un momento concreto en que una consecuencia inesperada obliga a actuar, pero deja abiertas varias rutas y no decide por tu personaje.`,
+      genre:clip(prefs?.genre,100)||"Aventura personalizada",
+      setting:clip(prefs?.setting,180)||"Según la premisa del jugador",
+      era:clip(prefs?.era,100)||"Según la premisa",
+      tone:clip(prefs?.tone,120)||"Reactivo y cinematográfico",
+      fantasy:clip(prefs?.fantasy,80)||"Según la premisa",
+      combat:Math.max(0,Math.min(5,Number(prefs?.combat)||2)),
+      exploration:Math.max(0,Math.min(5,Number(prefs?.exploration)||3)),
+      conversation:Math.max(0,Math.min(5,Number(prefs?.conversation)||3)),
+      mystery:Math.max(0,Math.min(5,Number(prefs?.mystery)||2)),
+      difficulty:["amable","equilibrada","exigente"].includes(prefs?.difficulty)?prefs.difficulty:"equilibrada",
+      mortality:["permanente","consecuencias"].includes(prefs?.mortality)?prefs.mortality:"consecuencias",
+      duration:clip(prefs?.duration,100)||"Campaña abierta",
+      themes:clip(prefs?.themes,1000)||"decisiones, relaciones y consecuencias"
+    };
+  }
+  const bytes=new Uint32Array(1);crypto.getRandomValues(bytes);
+  const idea=ideas[bytes[0]%ideas.length];
+  return {...idea,combat:2,exploration:3,conversation:4,mystery:3,difficulty:"equilibrada",mortality:"consecuencias",duration:"Campaña abierta"};
+}
+
+function fallbackCharacterBuild({concept="",premise="",ancestry="",background=""}={}) {
+  const text=plainText(`${concept} ${premise} ${background}`);
+  let classId="rogue",priority=["DEX","INT","WIS","CHA","CON","STR"];
+  if(/\b(fuerte|soldad|boxe|luch|guerr|militar|tanque|resistente|fisico|fisica)\b/.test(text)){classId="warrior";priority=["STR","CON","DEX","WIS","CHA","INT"]}
+  else if(/\b(medic|doctor|enfermer|paramedic|lider|protector|apoyo|sanador)\b/.test(text)){classId="cleric";priority=["WIS","CHA","CON","INT","DEX","STR"]}
+  else if(/\b(mag|poder|psionic|tecnolog|cientific|hacker|mutacion|energia)\b/.test(text)){classId="mage";priority=["INT","WIS","DEX","CON","CHA","STR"]}
+  return {classId,priority,ancestry:ancestry||"Humano",background:background||concept||"Una historia todavía por definir.",languages:["Común"],reason:"Configuración de respaldo coherente con el concepto para que la creación nunca se bloquee."};
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
     if (request.method === "OPTIONS") {
-      if (origin && !ALLOWED_ORIGINS.has(origin)) return new Response(null,{status:403});
+      if (origin && !isAllowedOrigin(origin)) return new Response(null,{status:403});
       return new Response(null,{status:204,headers:cors(origin)});
     }
-    if (origin && !ALLOWED_ORIGINS.has(origin)) return json({error:"Origin not allowed"},403,origin);
+    if (origin && !isAllowedOrigin(origin)) return json({error:"Origin not allowed"},403,origin);
 
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/connection")) {
@@ -1046,38 +1134,41 @@ Idea escrita por el usuario, si existe: ${seed || "ninguna"}
 Preferencias actuales: ${JSON.stringify(prefs).slice(0,2500)}
 
 Devuelve solo el JSON solicitado.`;
+      let parsed=null, degraded=false;
+      const campaignMessages=[
+        {role:"system",content:"Eres un diseñador de campañas de rol extremadamente versátil. No asumas fantasía medieval."},
+        {role:"user",content:prompt}
+      ];
       try {
-        const parsed = await runStructured(env,{
-          messages:[
-            {role:"system",content:"Eres un diseñador de campañas de rol extremadamente versátil. No asumas fantasía medieval."},
-            {role:"user",content:prompt}
-          ],
-          schema:RANDOM_CAMPAIGN_SCHEMA,
-          max_tokens:720,
-          temperature:0.82,
-          top_p:0.94
-        });
-        if (!parsed) return json({error:"El Director no pudo construir una idea válida."},502,origin);
-        return json({campaign:{
-          premise:clip(parsed.premise,3500),
-          genre:clip(parsed.genre,100),
-          setting:clip(parsed.setting,180),
-          era:clip(parsed.era,100),
-          tone:clip(parsed.tone,120),
-          fantasy:clip(parsed.fantasy,80),
-          combat:Math.max(0,Math.min(5,Number(parsed.combat)||0)),
-          exploration:Math.max(0,Math.min(5,Number(parsed.exploration)||0)),
-          conversation:Math.max(0,Math.min(5,Number(parsed.conversation)||0)),
-          mystery:Math.max(0,Math.min(5,Number(parsed.mystery)||0)),
-          difficulty:["amable","equilibrada","exigente"].includes(parsed.difficulty)?parsed.difficulty:"equilibrada",
-          mortality:["permanente","consecuencias"].includes(parsed.mortality)?parsed.mortality:"consecuencias",
-          duration:clip(parsed.duration,100)||"Campaña abierta",
-          themes:clip(parsed.themes,1000)
-        }},200,origin);
-      } catch (error) {
-        console.error("RASTHOR·IA random campaign error",error);
-        return json({error:"El Director no pudo inventar una campaña ahora. Prueba otra vez."},503,origin);
+        parsed = await runStructured(env,{messages:campaignMessages,schema:RANDOM_CAMPAIGN_SCHEMA,max_tokens:720,temperature:0.82,top_p:0.94,attempts:1,timeoutMs:12000});
+      } catch (firstError) {
+        console.warn("RASTHOR·IA random campaign structured fallback",firstError);
+        try {
+          parsed = await runLooseJSON(env,{messages:campaignMessages,max_tokens:720,temperature:0.78,top_p:0.93,timeoutMs:8000});
+          degraded=true;
+        } catch (secondError) {
+          console.warn("RASTHOR·IA random campaign local fallback",secondError);
+          parsed=fallbackRandomCampaign(seed,prefs);
+          degraded=true;
+        }
       }
+      if (!parsed || typeof parsed!=="object") { parsed=fallbackRandomCampaign(seed,prefs); degraded=true; }
+      return json({campaign:{
+        premise:clip(parsed.premise,3500),
+        genre:clip(parsed.genre,100),
+        setting:clip(parsed.setting,180),
+        era:clip(parsed.era,100),
+        tone:clip(parsed.tone,120),
+        fantasy:clip(parsed.fantasy,80),
+        combat:Math.max(0,Math.min(5,Number(parsed.combat)||0)),
+        exploration:Math.max(0,Math.min(5,Number(parsed.exploration)||0)),
+        conversation:Math.max(0,Math.min(5,Number(parsed.conversation)||0)),
+        mystery:Math.max(0,Math.min(5,Number(parsed.mystery)||0)),
+        difficulty:["amable","equilibrada","exigente"].includes(parsed.difficulty)?parsed.difficulty:"equilibrada",
+        mortality:["permanente","consecuencias"].includes(parsed.mortality)?parsed.mortality:"consecuencias",
+        duration:clip(parsed.duration,100)||"Campaña abierta",
+        themes:clip(parsed.themes,1000)
+      },degraded},200,origin);
     }
 
     if (request.method === "POST" && url.pathname === "/api/character-build") {
@@ -1115,35 +1206,32 @@ Elige classId por cómo funcionaría el personaje, no por estética.
 priority debe contener STR, DEX, CON, INT, WIS y CHA ordenadas desde la característica más importante a la menos importante. El juego asignará 15,14,13,12,10,8 en ese orden.
 Si la historia es realista, no inventes magia. ancestry debe respetar lo escrito por el usuario; solo sugiere algo si estaba genérico. background puede ampliar brevemente el concepto sin decidir eventos importantes por el jugador.
 Devuelve solo el JSON solicitado.`;
+      let parsed=null,degraded=false;
+      const buildMessages=[
+        {role:"system",content:"Eres un diseñador de personajes d20 que adapta mecánicas a cualquier género sin imponer fantasía medieval."},
+        {role:"user",content:prompt}
+      ];
       try {
-        const parsed = await runStructured(env,{
-          messages:[
-            {role:"system",content:"Eres un diseñador de personajes d20 que adapta mecánicas a cualquier género sin imponer fantasía medieval."},
-            {role:"user",content:prompt}
-          ],
-          schema:CHARACTER_BUILD_SCHEMA,
-          max_tokens:480,
-          temperature:0.45,
-          top_p:0.88
-        });
-        if (!parsed) return json({error:"El Director no pudo preparar una ficha válida."},502,origin);
-        const abilities=["STR","DEX","CON","INT","WIS","CHA"];
-        const priority=[];
-        for(const a of Array.isArray(parsed.priority)?parsed.priority:[]) if(abilities.includes(a)&&!priority.includes(a)) priority.push(a);
-        for(const a of abilities) if(!priority.includes(a)) priority.push(a);
-        const classId=["warrior","rogue","mage","cleric"].includes(parsed.classId)?parsed.classId:"rogue";
-        return json({build:{
-          classId,
-          priority:priority.slice(0,6),
-          ancestry:clip(parsed.ancestry,100)||ancestry||"Humano",
-          background:clip(parsed.background,900),
-          languages:Array.isArray(parsed.languages)?parsed.languages.slice(0,5).map(x=>clip(x,50)).filter(Boolean):[],
-          reason:clip(parsed.reason,500)
-        }},200,origin);
-      } catch(error) {
-        console.error("RASTHOR·IA character build error",error);
-        return json({error:"El Director no pudo preparar tu ficha ahora. Puedes repartir las características manualmente o al azar."},503,origin);
+        parsed=await runStructured(env,{messages:buildMessages,schema:CHARACTER_BUILD_SCHEMA,max_tokens:480,temperature:0.45,top_p:0.88,attempts:1,timeoutMs:11000});
+      } catch(firstError) {
+        console.warn("RASTHOR·IA character structured fallback",firstError);
+        try { parsed=await runLooseJSON(env,{messages:buildMessages,max_tokens:480,temperature:0.35,top_p:0.84,timeoutMs:7000}); degraded=true; }
+        catch(secondError) { console.warn("RASTHOR·IA character local fallback",secondError); parsed=fallbackCharacterBuild({concept,premise,ancestry,background}); degraded=true; }
       }
+      if(!parsed||typeof parsed!=="object") { parsed=fallbackCharacterBuild({concept,premise,ancestry,background}); degraded=true; }
+      const abilities=["STR","DEX","CON","INT","WIS","CHA"];
+      const priority=[];
+      for(const a of Array.isArray(parsed.priority)?parsed.priority:[]) if(abilities.includes(a)&&!priority.includes(a)) priority.push(a);
+      for(const a of abilities) if(!priority.includes(a)) priority.push(a);
+      const classId=["warrior","rogue","mage","cleric"].includes(parsed.classId)?parsed.classId:"rogue";
+      return json({build:{
+        classId,
+        priority:priority.slice(0,6),
+        ancestry:clip(parsed.ancestry,100)||ancestry||"Humano",
+        background:clip(parsed.background,900),
+        languages:Array.isArray(parsed.languages)?parsed.languages.slice(0,5).map(x=>clip(x,50)).filter(Boolean):[],
+        reason:clip(parsed.reason,500)
+      },degraded},200,origin);
     }
 
     if (request.method !== "POST" || url.pathname !== "/api/gm") return json({error:"Not found"},404,origin);
@@ -1171,7 +1259,7 @@ Devuelve solo el JSON solicitado.`;
       : "";
 
     const d20Directive = d20Turn
-      ? "\n\nRESOLUCIÓN D20 OBLIGATORIA — DICE-FIRST\nRASTHOR·IA exige una tirada para toda acción del personaje que avance la ficción. Debes devolver check con la característica/habilidad, DC y ventaja/desventaja apropiadas. Si la acción básica es sencilla, usa el D20 para medir calidad, información, coste, tiempo, exposición o complicación. Narra solamente preparación, intento o tensión previa; NO narres todavía el resultado. El motor bloqueará el avance hasta que el jugador tire."
+      ? "\n\nRESOLUCIÓN D20 NECESARIA\nEsta acción contiene incertidumbre real, oposición, riesgo o una tarea técnica que debe resolverse con D20. Devuelve check con característica/habilidad, DC y ventaja/desventaja apropiadas. Narra solo el intento o tensión previa; NO narres todavía éxito o fracaso. El motor continuará después de la tirada."
       : "";
 
     const inventoryDirective = genericItems.length
@@ -1185,35 +1273,32 @@ Devuelve solo el JSON solicitado.`;
     const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${hostilityDirective}${d20Directive}${inventoryDirective}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
 
     try {
-      let parsed = await runStructured(env,{
-        messages:[
-          {role:"system",content:SYSTEM},
-          {role:"user",content:userPrompt},
-        ],
-        schema:RESPONSE_SCHEMA,
-        max_tokens:isOpening?1250:1100,
-        temperature:isOpening?0.66:0.58,
-        top_p:0.91,
-        attempts:1,
-        timeoutMs:18000
-      });
+      const turnMessages=[
+        {role:"system",content:SYSTEM},
+        {role:"user",content:userPrompt},
+      ];
+      let parsed;
+      try {
+        parsed = await runStructured(env,{messages:turnMessages,schema:RESPONSE_SCHEMA,max_tokens:isOpening?1250:1100,temperature:isOpening?0.66:0.58,top_p:0.91,attempts:1,timeoutMs:13000});
+      } catch(primaryError) {
+        console.warn("RASTHOR·IA Narrador structured fallback",primaryError);
+        parsed = await runLooseJSON(env,{messages:turnMessages,max_tokens:isOpening?1250:1100,temperature:isOpening?0.58:0.5,top_p:0.9,timeoutMs:9000});
+      }
       let response = normalizeResponse(parsed,campaign);
       const semanticIssue = semanticProblem(response,campaign);
       if (semanticIssue) {
         console.warn("RASTHOR·IA semantic repair:",semanticIssue);
-        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno respetando la regla Dice-First. Toda acción no hostil del personaje que avance la ficción DEBE devolver check y detener la narración antes del resultado, aunque en una mesa estándar pareciera sencilla; usa DC baja y deja que el dado mida calidad o complicación. Si es un ataque contra alguien capaz de reaccionar y no hay combate, encounter DEBE contener al menos un adversario. Solo las consultas puramente informativas de estado quedan sin tirada.`;
-        parsed = await runStructured(env,{
-          messages:[
-            {role:"system",content:SYSTEM},
-            {role:"user",content:repairPrompt},
-          ],
-          schema:RESPONSE_SCHEMA,
-          max_tokens:1050,
-          temperature:0.35,
-          top_p:0.86,
-          attempts:1,
-          timeoutMs:14000
-        });
+        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno corrigiendo únicamente el problema indicado. Pide D20 solo si existe incertidumbre real, oposición, riesgo o una tarea técnica; conversación normal, preguntas y roleo libre deben continuar sin tirada. Si es un ataque contra alguien capaz de reaccionar y no hay combate, encounter DEBE contener al menos un adversario.`;
+        const repairMessages=[
+          {role:"system",content:SYSTEM},
+          {role:"user",content:repairPrompt},
+        ];
+        try {
+          parsed = await runStructured(env,{messages:repairMessages,schema:RESPONSE_SCHEMA,max_tokens:1050,temperature:0.35,top_p:0.86,attempts:1,timeoutMs:9000});
+        } catch(repairError) {
+          console.warn("RASTHOR·IA Narrador semantic loose fallback",repairError);
+          parsed = await runLooseJSON(env,{messages:repairMessages,max_tokens:1050,temperature:0.3,top_p:0.84,timeoutMs:7000});
+        }
         response = normalizeResponse(parsed,campaign);
         const secondIssue=semanticProblem(response,campaign);
         if(secondIssue) {
@@ -1234,12 +1319,12 @@ Devuelve solo el JSON solicitado.`;
     } catch (error) {
       console.error("RASTHOR·IA Workers AI error",error);
       try {
-        const fallback=emergencyDirectorResponse(campaign);
-        console.warn("RASTHOR·IA emergency Director fallback active");
+        const fallback=emergencyNarradorResponse(campaign);
+        console.warn("RASTHOR·IA emergency Narrador fallback active");
         return json({response:fallback,vault:fallback.privateMemory,degraded:true},200,origin);
       } catch (fallbackError) {
         console.error("RASTHOR·IA emergency fallback error",fallbackError);
-        return json({error:"El Director IA no pudo completar este turno. Tu acción sigue guardada para reintentar."},503,origin);
+        return json({error:"El Narrador no pudo completar este turno. Tu acción sigue guardada para reintentar."},503,origin);
       }
     }
   }

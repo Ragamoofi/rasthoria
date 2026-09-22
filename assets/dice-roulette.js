@@ -138,7 +138,7 @@
   function rollingTick(state){
     if (!state.rolling) return;
     const nextNum = randomFace(state.sides, state.current);
-    const duration = 72 + Math.floor(Math.random()*24);
+    const duration = 64 + Math.floor(Math.random()*22);
     animateTo(state, nextNum, duration);
     state.tickTimer = window.setTimeout(() => rollingTick(state), duration + 22);
   }
@@ -167,10 +167,10 @@
       randomFace(state.sides, target),
       target
     ];
-    const delays = REDUCED ? [0] : [70, 95, 125, 170, 235];
+    const delays = REDUCED ? [0] : [65, 86, 116, 158, 205];
     let acc = 0;
     steps.forEach((num, index) => {
-      const dur = REDUCED ? 0 : Math.min(180, Math.max(70, delays[index]-12));
+      const dur = REDUCED ? 0 : Math.min(165, Math.max(62, delays[index]-12));
       const t = window.setTimeout(() => animateTo(state, num, dur), acc);
       state.stopTimers.push(t);
       acc += delays[index];

@@ -1,18 +1,3 @@
-RASTHOR·IA — CAMBIOS DADOS RULETA
+Copia estos archivos respetando las carpetas. Después elimina los archivos listados en ELIMINAR_ESTOS_ARCHIVOS.txt.
 
-Reemplaza estos archivos dentro de tu carpeta local RASTHORIA:
-
-- index.html
-- DADOS_RULETA_LAB.html
-- assets/dice-roulette.css
-- assets/dice-roulette.js
-
-Qué hace esta versión:
-- elimina la referencia al dado 3D anterior
-- agrega el nuevo sistema visual tipo ruleta interna
-- deja un laboratorio aparte para probar dados sin entrar a campaña
-
-Después de copiar:
-1. abre DADOS_RULETA_LAB.html para ver la animación
-2. abre index.html / prueba RASTHOR·IA
-3. si te gusta, haz commit y push con GitHub Desktop
+Para probar el Narrador nuevo debes hacer Push, porque el backend vive en Cloudflare Workers.

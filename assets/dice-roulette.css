@@ -1,27 +1,30 @@
-
-/* RASTHOR·IA — Dados estilo ruleta interna */
+/* RASTHOR·IA — dados 2D con ruleta interna. Sin WebGL, sin físicas falsas. */
 .die-shape.ras-roulette-ready{
-  --ras-gold:#e3c48f;
-  --ras-gold-soft:#b68f53;
-  --ras-ink:#120f14;
-  --ras-panel:#1b161c;
-  --ras-panel-2:#241d22;
-  --ras-cream:#f2e4bf;
+  --ras-gold:#e2bd78;
+  --ras-gold-bright:#f4d9a4;
+  --ras-gold-dim:#8f6b3f;
+  --ras-cream:#fff0c8;
+  --ras-face:#211a20;
+  --ras-face-deep:#0e0b10;
   position:relative!important;
-  overflow:visible!important;
-  isolation:isolate;
   display:grid!important;
   place-items:center;
-  filter:drop-shadow(0 10px 16px rgba(0,0,0,.45));
+  width:118px;
+  height:118px;
+  isolation:isolate;
+  overflow:visible!important;
   transform:none!important;
   animation:none!important;
+  filter:drop-shadow(0 13px 18px rgba(0,0,0,.48));
 }
 .die-shape.ras-roulette-ready.is-rolling{animation:none!important;transform:none!important}
-.die-shape.ras-roulette-ready > .die-icon,
-.die-shape.ras-roulette-ready > span,
-.die-shape.ras-roulette-ready > small{opacity:0!important;pointer-events:none!important}
+.die-shape.ras-roulette-ready>.die-icon,
+.die-shape.ras-roulette-ready>span,
+.die-shape.ras-roulette-ready>small{opacity:0!important;pointer-events:none!important}
 .die-shape.ras-roulette-ready::before,
 .die-shape.ras-roulette-ready::after{display:none!important}
+
+.die-shape.ras-roulette-ready .ras-dice-ui{position:absolute;inset:0;display:block;isolation:isolate}
 .die-shape.ras-roulette-ready .ras-dice-frame,
 .die-shape.ras-roulette-ready .ras-dice-face,
 .die-shape.ras-roulette-ready .ras-dice-inner,
@@ -29,147 +32,195 @@
 .die-shape.ras-roulette-ready .ras-dice-window,
 .die-shape.ras-roulette-ready .ras-dice-flare,
 .die-shape.ras-roulette-ready .ras-dice-caption,
-.die-shape.ras-roulette-ready .ras-dice-track,
-.die-shape.ras-roulette-ready .ras-dice-cell{position:absolute;inset:0}
+.die-shape.ras-roulette-ready .ras-dice-track{position:absolute}
 
+/* Silueta exterior: obsidiana/bronce, más ilustración de dado que "caja UI". */
 .die-shape.ras-roulette-ready .ras-dice-frame{
-  inset:9%;
-  border:1px solid rgba(223,185,120,.9);
+  inset:4%;
+  z-index:0;
   background:
-    radial-gradient(circle at 50% 28%, rgba(255,229,164,.16), transparent 30%),
-    radial-gradient(circle at 50% 72%, rgba(255,209,123,.08), transparent 38%),
-    linear-gradient(150deg,#3c2e23 0%,#19151b 55%,#110e13 100%);
-  box-shadow:inset 0 1px rgba(255,255,255,.12), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 24px rgba(214,165,85,.12);
+    radial-gradient(circle at 42% 27%,rgba(255,235,191,.16),transparent 29%),
+    linear-gradient(145deg,#6e5235 0%,#2d231e 18%,#171319 52%,#0b090d 100%);
+  border:1px solid rgba(244,208,143,.9);
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.18),
+    inset 0 -22px 28px rgba(0,0,0,.48),
+    0 0 0 1px rgba(99,66,34,.7),
+    0 0 24px rgba(201,150,73,.11);
 }
 .die-shape.ras-roulette-ready .ras-dice-face{
-  inset:17%;
-  border:1px solid rgba(227,191,126,.34);
-  background:linear-gradient(180deg, rgba(255,237,188,.06), rgba(255,255,255,0) 22%), linear-gradient(180deg, #272027 0%, #19161b 100%);
-  box-shadow: inset 0 1px rgba(255,255,255,.06), inset 0 -12px 16px rgba(0,0,0,.34);
+  inset:10%;
+  z-index:1;
+  background:
+    linear-gradient(151deg,transparent 0 48.8%,rgba(229,190,119,.13) 49.4%,rgba(229,190,119,.13) 50.4%,transparent 51%),
+    linear-gradient(29deg,transparent 0 48.8%,rgba(229,190,119,.11) 49.4%,rgba(229,190,119,.11) 50.4%,transparent 51%),
+    radial-gradient(circle at 50% 37%,rgba(225,180,99,.1),transparent 44%),
+    linear-gradient(160deg,#34272a 0%,#1d171d 54%,#100d12 100%);
+  border:1px solid rgba(226,184,111,.3);
+  box-shadow:inset 0 1px rgba(255,255,255,.07),inset 0 -14px 20px rgba(0,0,0,.38);
 }
-.die-shape.ras-roulette-ready .ras-dice-inner{
-  inset:27%;
-  border-radius:16px;
-  border:1px solid rgba(233,201,140,.14);
-  background:linear-gradient(180deg,#131015,#0b090d);
-  box-shadow:inset 0 0 22px rgba(0,0,0,.44);
-}
+.die-shape.ras-roulette-ready .ras-dice-inner{display:none}
+
+/* Facetas finas, deliberadamente 2D. */
 .die-shape.ras-roulette-ready .ras-dice-ornament{
-  inset:8%;
-  background:
-    linear-gradient(90deg, transparent 0 7%, rgba(223,187,118,.15) 8%, transparent 9% 91%, rgba(223,187,118,.15) 92%, transparent 93%),
-    linear-gradient(0deg, transparent 0 7%, rgba(223,187,118,.14) 8%, transparent 9% 91%, rgba(223,187,118,.14) 92%, transparent 93%);
-  opacity:.85;
+  inset:10%;
+  z-index:2;
   pointer-events:none;
-}
-.die-shape.ras-roulette-ready .ras-dice-flare{
-  inset:auto 20% 14% 20%;
-  height:16%;
-  border-radius:50%;
-  background:radial-gradient(circle at center, rgba(243,205,132,.26), rgba(243,205,132,0) 72%);
-  filter:blur(8px);
-  opacity:.75;
-}
-.die-shape.ras-roulette-ready .ras-dice-window{
-  inset:31% 23%;
-  overflow:hidden;
-  border-radius:12px;
-  border:1px solid rgba(228,193,128,.3);
+  opacity:.7;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0) 35%),
-    linear-gradient(180deg,#0a090c 0%, #161218 100%);
-  box-shadow:inset 0 0 16px rgba(0,0,0,.48),0 0 0 1px rgba(255,230,176,.03);
+    linear-gradient(90deg,transparent 49.4%,rgba(239,200,132,.13) 49.8%,rgba(239,200,132,.13) 50.2%,transparent 50.6%),
+    linear-gradient(0deg,transparent 49.4%,rgba(239,200,132,.08) 49.8%,rgba(239,200,132,.08) 50.2%,transparent 50.6%);
+  clip-path:inherit;
+}
+.die-shape.ras-roulette-ready .ras-dice-ornament::before,
+.die-shape.ras-roulette-ready .ras-dice-ornament::after{
+  content:"";
+  position:absolute;
+  left:50%;top:50%;
+  width:76%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(231,191,121,.22),transparent);
+  transform-origin:center;
+}
+.die-shape.ras-roulette-ready .ras-dice-ornament::before{transform:translate(-50%,-50%) rotate(33deg)}
+.die-shape.ras-roulette-ready .ras-dice-ornament::after{transform:translate(-50%,-50%) rotate(-33deg)}
+
+/* El número es el protagonista: visor oscuro integrado en la cara. */
+.die-shape.ras-roulette-ready .ras-dice-window{
+  left:50%;top:50%;
+  width:48%;height:48%;
+  transform:translate(-50%,-54%);
+  z-index:5;
+  overflow:hidden;
+  border-radius:50%;
+  border:1px solid rgba(244,210,145,.52);
+  background:
+    radial-gradient(circle at 48% 33%,rgba(255,255,255,.06),transparent 31%),
+    linear-gradient(180deg,#171319,#09070b);
+  box-shadow:
+    inset 0 0 0 2px rgba(0,0,0,.22),
+    inset 0 8px 15px rgba(0,0,0,.48),
+    0 0 0 3px rgba(67,47,31,.6),
+    0 4px 11px rgba(0,0,0,.5),
+    0 0 16px rgba(216,166,84,.08);
 }
 .die-shape.ras-roulette-ready .ras-dice-window::before,
 .die-shape.ras-roulette-ready .ras-dice-window::after{
   content:"";
-  position:absolute;
-  left:0;right:0;
-  height:24%;
-  z-index:2;
-  pointer-events:none;
+  position:absolute;left:0;right:0;height:27%;z-index:3;pointer-events:none;
 }
-.die-shape.ras-roulette-ready .ras-dice-window::before{top:0;background:linear-gradient(180deg,#141116,rgba(20,17,22,0));}
-.die-shape.ras-roulette-ready .ras-dice-window::after{bottom:0;background:linear-gradient(0deg,#141116,rgba(20,17,22,0));}
-.die-shape.ras-roulette-ready .ras-dice-track{display:flex;flex-direction:column;transition:transform 110ms cubic-bezier(.2,.75,.2,1);transform:translateY(0);height:200%}
+.die-shape.ras-roulette-ready .ras-dice-window::before{top:0;background:linear-gradient(180deg,#121016,rgba(18,16,22,0))}
+.die-shape.ras-roulette-ready .ras-dice-window::after{bottom:0;background:linear-gradient(0deg,#0d0b10,rgba(13,11,16,0))}
+.die-shape.ras-roulette-ready .ras-dice-track{
+  inset:0;
+  height:200%;
+  display:flex;
+  flex-direction:column;
+  will-change:transform;
+  transform:translateY(0);
+  transition:transform 90ms cubic-bezier(.18,.72,.22,1);
+}
 .die-shape.ras-roulette-ready .ras-dice-cell{
   position:relative;
-  height:50%;
+  flex:0 0 50%;
   display:flex;
   align-items:center;
   justify-content:center;
   font-family:Georgia,"Times New Roman",serif;
-  font-size:40px;
+  font-size:43px;
   font-weight:700;
-  color:var(--ras-cream);
   line-height:1;
-  letter-spacing:.02em;
-  text-shadow:0 2px 6px rgba(0,0,0,.85),0 0 14px rgba(240,196,113,.16);
+  color:var(--ras-cream);
   font-variant-numeric:tabular-nums;
+  text-shadow:0 2px 4px #000,0 0 13px rgba(239,190,98,.19);
 }
-.die-shape.ras-roulette-ready .ras-dice-cell.is-next{opacity:.82}
+.die-shape.ras-roulette-ready .ras-dice-cell.is-next{opacity:.86;filter:blur(.25px)}
 .die-shape.ras-roulette-ready .ras-dice-track.is-animating{transform:translateY(-50%)}
+
 .die-shape.ras-roulette-ready .ras-dice-caption{
-  inset:auto 0 13%;
-  height:auto;
-  text-align:center;
-  font:700 9px/1 system-ui,sans-serif;
-  letter-spacing:1.6px;
-  color:#bfa67a;
+  left:50%;bottom:13%;
+  transform:translateX(-50%);
+  z-index:6;
+  color:#c9aa74;
+  font:700 8px/1 Arial,sans-serif;
+  letter-spacing:1.8px;
+  text-shadow:0 1px 4px #000;
   opacity:.9;
-  text-shadow:0 1px 3px rgba(0,0,0,.8);
+  white-space:nowrap;
 }
-.die-shape.ras-roulette-ready.ras-rolling .ras-dice-window{box-shadow:inset 0 0 18px rgba(0,0,0,.48), 0 0 0 1px rgba(255,218,163,.04),0 0 26px rgba(212,157,74,.13)}
-.die-shape.ras-roulette-ready.ras-rolling .ras-dice-frame{box-shadow:inset 0 1px rgba(255,255,255,.12), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 26px rgba(214,165,85,.18)}
-.die-shape.ras-roulette-ready.ras-result-max .ras-dice-frame,
-.die-shape.ras-roulette-ready.ras-result-highlight .ras-dice-frame{box-shadow:inset 0 1px rgba(255,255,255,.12), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 30px rgba(255,209,96,.26)}
-.die-shape.ras-roulette-ready.ras-result-max .ras-dice-window,
-.die-shape.ras-roulette-ready.ras-result-highlight .ras-dice-window{border-color:rgba(239,200,112,.58)}
-.die-shape.ras-roulette-ready.ras-result-min .ras-dice-frame{box-shadow:inset 0 1px rgba(255,255,255,.08), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 22px rgba(184,84,84,.18)}
-.die-shape.ras-roulette-ready.ras-result-min .ras-dice-window{border-color:rgba(181,100,100,.45)}
+.die-shape.ras-roulette-ready .ras-dice-flare{
+  left:18%;right:18%;bottom:2%;height:22%;
+  z-index:-1;
+  border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(222,169,84,.22),transparent 67%);
+  filter:blur(9px);
+  opacity:.55;
+}
 
-.die-shape.ras-roulette-ready.die-d4 .ras-dice-frame{clip-path:polygon(50% 3%, 96% 91%, 4% 91%)}
-.die-shape.ras-roulette-ready.die-d4 .ras-dice-face{clip-path:polygon(50% 12%, 84% 80%, 16% 80%);inset:16% 17% 18%}
-.die-shape.ras-roulette-ready.die-d4 .ras-dice-window{inset:38% 27% 27%}
-.die-shape.ras-roulette-ready.die-d4 .ras-dice-caption{bottom:12%}
+/* Siluetas. El visor central no cambia: así la ruleta siempre se entiende. */
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-frame{clip-path:polygon(50% 2%,98% 94%,2% 94%)}
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-face{clip-path:polygon(50% 7%,93% 90%,7% 90%)}
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-ornament{clip-path:polygon(50% 7%,93% 90%,7% 90%)}
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-window{width:42%;height:42%;top:57%}
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-caption{bottom:9%}
 
-.die-shape.ras-roulette-ready.die-d6 .ras-dice-frame{clip-path:polygon(13% 13%,87% 13%,87% 87%,13% 87%);border-radius:14px}
-.die-shape.ras-roulette-ready.die-d6 .ras-dice-face{clip-path:polygon(14% 14%,86% 14%,86% 86%,14% 86%);border-radius:10px;inset:18%}
-.die-shape.ras-roulette-ready.die-d6 .ras-dice-window{inset:31% 24%}
+.die-shape.ras-roulette-ready.die-d6 .ras-dice-frame{clip-path:polygon(13% 8%,87% 8%,95% 18%,95% 82%,87% 92%,13% 92%,5% 82%,5% 18%);border-radius:10%}
+.die-shape.ras-roulette-ready.die-d6 .ras-dice-face{clip-path:polygon(12% 8%,88% 8%,94% 15%,94% 85%,88% 92%,12% 92%,6% 85%,6% 15%);border-radius:8%}
+.die-shape.ras-roulette-ready.die-d6 .ras-dice-ornament{clip-path:polygon(12% 8%,88% 8%,94% 15%,94% 85%,88% 92%,12% 92%,6% 85%,6% 15%)}
 
-.die-shape.ras-roulette-ready.die-d8 .ras-dice-frame{clip-path:polygon(50% 1%,95% 50%,50% 99%,5% 50%)}
-.die-shape.ras-roulette-ready.die-d8 .ras-dice-face{clip-path:polygon(50% 10%,85% 50%,50% 90%,15% 50%);inset:18%}
+.die-shape.ras-roulette-ready.die-d8 .ras-dice-frame{clip-path:polygon(50% 0,97% 50%,50% 100%,3% 50%)}
+.die-shape.ras-roulette-ready.die-d8 .ras-dice-face{clip-path:polygon(50% 5%,92% 50%,50% 95%,8% 50%)}
+.die-shape.ras-roulette-ready.die-d8 .ras-dice-ornament{clip-path:polygon(50% 5%,92% 50%,50% 95%,8% 50%)}
 
-.die-shape.ras-roulette-ready.die-d10 .ras-dice-frame{clip-path:polygon(50% 0,91% 33%,75% 100%,25% 100%,9% 33%)}
-.die-shape.ras-roulette-ready.die-d10 .ras-dice-face{clip-path:polygon(50% 9%,83% 35%,70% 88%,30% 88%,17% 35%);inset:16% 18% 17%}
-.die-shape.ras-roulette-ready.die-d10 .ras-dice-window{inset:34% 25% 28%}
+.die-shape.ras-roulette-ready.die-d10 .ras-dice-frame{clip-path:polygon(50% 0,91% 30%,76% 96%,50% 100%,24% 96%,9% 30%)}
+.die-shape.ras-roulette-ready.die-d10 .ras-dice-face{clip-path:polygon(50% 5%,86% 31%,72% 90%,50% 95%,28% 90%,14% 31%)}
+.die-shape.ras-roulette-ready.die-d10 .ras-dice-ornament{clip-path:polygon(50% 5%,86% 31%,72% 90%,50% 95%,28% 90%,14% 31%)}
 
 .die-shape.ras-roulette-ready.die-d12 .ras-dice-frame{clip-path:polygon(50% 0,79% 9%,97% 34%,97% 66%,79% 91%,50% 100%,21% 91%,3% 66%,3% 34%,21% 9%)}
-.die-shape.ras-roulette-ready.die-d12 .ras-dice-face{clip-path:polygon(50% 10%,75% 17%,90% 38%,90% 62%,75% 83%,50% 90%,25% 83%,10% 62%,10% 38%,25% 17%);inset:14%}
+.die-shape.ras-roulette-ready.die-d12 .ras-dice-face{clip-path:polygon(50% 5%,77% 13%,91% 36%,91% 64%,77% 87%,50% 95%,23% 87%,9% 64%,9% 36%,23% 13%)}
+.die-shape.ras-roulette-ready.die-d12 .ras-dice-ornament{clip-path:polygon(50% 5%,77% 13%,91% 36%,91% 64%,77% 87%,50% 95%,23% 87%,9% 64%,9% 36%,23% 13%)}
 
 .die-shape.ras-roulette-ready.die-d20 .ras-dice-frame,
-.die-shape.ras-roulette-ready.die-d100 .ras-dice-frame{clip-path:polygon(50% 0,91% 21%,100% 64%,72% 100%,28% 100%,0 64%,9% 21%)}
+.die-shape.ras-roulette-ready.die-d100 .ras-dice-frame{clip-path:polygon(50% 0,89% 19%,100% 58%,76% 94%,50% 100%,24% 94%,0 58%,11% 19%)}
 .die-shape.ras-roulette-ready.die-d20 .ras-dice-face,
-.die-shape.ras-roulette-ready.die-d100 .ras-dice-face{clip-path:polygon(50% 8%,84% 25%,92% 60%,70% 92%,30% 92%,8% 60%,16% 25%);inset:15%}
+.die-shape.ras-roulette-ready.die-d100 .ras-dice-face{clip-path:polygon(50% 5%,85% 22%,94% 57%,72% 89%,50% 95%,28% 89%,6% 57%,15% 22%)}
+.die-shape.ras-roulette-ready.die-d20 .ras-dice-ornament,
+.die-shape.ras-roulette-ready.die-d100 .ras-dice-ornament{clip-path:polygon(50% 5%,85% 22%,94% 57%,72% 89%,50% 95%,28% 89%,6% 57%,15% 22%)}
 
+/* Estado de giro: el dado no baila; la energía está dentro. */
+.die-shape.ras-roulette-ready.ras-rolling .ras-dice-frame{
+  box-shadow:inset 0 1px rgba(255,255,255,.2),inset 0 -22px 28px rgba(0,0,0,.48),0 0 0 1px rgba(99,66,34,.7),0 0 28px rgba(225,171,83,.22);
+}
+.die-shape.ras-roulette-ready.ras-rolling .ras-dice-window{
+  border-color:rgba(248,216,153,.72);
+  box-shadow:inset 0 0 0 2px rgba(0,0,0,.22),inset 0 8px 15px rgba(0,0,0,.48),0 0 0 3px rgba(81,57,35,.68),0 4px 11px rgba(0,0,0,.5),0 0 22px rgba(224,168,77,.2);
+}
+.die-shape.ras-roulette-ready.ras-rolling .ras-dice-flare{opacity:.9}
+
+/* Resultado final. */
+.die-shape.ras-roulette-ready.ras-result-highlight .ras-dice-frame,
+.die-shape.ras-roulette-ready.ras-result-max .ras-dice-frame{filter:brightness(1.08);box-shadow:inset 0 1px rgba(255,255,255,.22),inset 0 -22px 28px rgba(0,0,0,.45),0 0 0 1px rgba(125,85,36,.8),0 0 32px rgba(247,194,79,.28)}
+.die-shape.ras-roulette-ready.ras-result-highlight .ras-dice-window,
+.die-shape.ras-roulette-ready.ras-result-max .ras-dice-window{border-color:rgba(255,222,142,.92)}
+.die-shape.ras-roulette-ready.ras-result-min .ras-dice-frame{box-shadow:inset 0 1px rgba(255,255,255,.13),inset 0 -22px 28px rgba(0,0,0,.48),0 0 0 1px rgba(85,41,39,.8),0 0 25px rgba(163,61,61,.22)}
+.die-shape.ras-roulette-ready.ras-result-min .ras-dice-window{border-color:rgba(187,94,89,.72)}
+
+/* Contextos del juego. */
 .pending-main .die-shape.ras-roulette-ready{width:72px!important;height:72px!important}
 .pending-main .die-shape.ras-roulette-ready .ras-dice-cell{font-size:26px}
-.pending-main .die-shape.ras-roulette-ready .ras-dice-caption{font-size:7px;bottom:10%}
-.pending-main .die-shape.ras-roulette-ready .ras-dice-window{border-radius:9px}
-.rolling-overlay .die-shape.ras-roulette-ready{width:158px;height:158px;filter:drop-shadow(0 18px 28px rgba(0,0,0,.52))}
-.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-cell{font-size:56px}
-.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-caption{font-size:10px;bottom:13.5%}
-.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-window{border-radius:15px}
+.pending-main .die-shape.ras-roulette-ready .ras-dice-caption{font-size:6px;bottom:12%}
+.rolling-overlay .die-shape.ras-roulette-ready{width:164px;height:164px;filter:drop-shadow(0 20px 29px rgba(0,0,0,.56))}
+.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-cell{font-size:58px}
+.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-caption{font-size:10px;bottom:13%}
 .die-shape.ras-roulette-ready.small{width:72px;height:72px}
-.die-shape.ras-roulette-ready.small .ras-dice-cell{font-size:25px}
-.die-shape.ras-roulette-ready.small .ras-dice-caption{font-size:7px;bottom:11%}
+.die-shape.ras-roulette-ready.small .ras-dice-cell{font-size:26px}
+.die-shape.ras-roulette-ready.small .ras-dice-caption{font-size:6px;bottom:12%}
 
-@media (max-width:760px){
-  .die-shape.ras-roulette-ready{width:102px;height:102px}
-  .die-shape.ras-roulette-ready .ras-dice-cell{font-size:34px}
-  .rolling-overlay .die-shape.ras-roulette-ready{width:128px;height:128px}
-  .rolling-overlay .die-shape.ras-roulette-ready .ras-dice-cell{font-size:46px}
+@media(max-width:760px){
+  .die-shape.ras-roulette-ready{width:104px;height:104px}
+  .die-shape.ras-roulette-ready .ras-dice-cell{font-size:37px}
+  .rolling-overlay .die-shape.ras-roulette-ready{width:132px;height:132px}
+  .rolling-overlay .die-shape.ras-roulette-ready .ras-dice-cell{font-size:48px}
 }
-@media (prefers-reduced-motion:reduce){
+@media(prefers-reduced-motion:reduce){
   .die-shape.ras-roulette-ready .ras-dice-track{transition:none!important}
 }
