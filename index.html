@@ -569,7 +569,8 @@ try {
     });
     if (fresh.length) {
       const node = fresh[fresh.length - 1];
-      speak(messageText(node), node);
+      const combined = fresh.map(messageText).filter(Boolean).join(" ");
+      speak(combined, node);
     }
   };
 
