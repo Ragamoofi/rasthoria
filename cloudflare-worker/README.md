@@ -1,6 +1,6 @@
 # RASTHOR·IA Cloud Narrator
 
-Backend del **Narrador** de RASTHOR·IA usando Cloudflare Workers AI y Llama 3.3 70B Fast.
+Backend del **Narrador** de RASTHOR·IA usando Cloudflare Workers AI.
 
 ## Cloudflare
 
@@ -8,6 +8,13 @@ Backend del **Narrador** de RASTHOR·IA usando Cloudflare Workers AI y Llama 3.3
 - Main: `src/index.js`
 - AI binding: `AI`
 - Worker esperado: `rasthoria-cloud-dm`
+
+## Modelos v15
+
+- principal: `@cf/qwen/qwen3-30b-a3b-fp8`
+- fallback: `@cf/google/gemma-4-26b-a4b-it`
+
+El Narrador solicita JSON por instrucciones y lo valida/normaliza localmente. Esto permite cambiar de modelo cuando hay timeout, capacidad temporal o JSON imperfecto.
 
 ## Endpoints
 
@@ -17,13 +24,14 @@ Backend del **Narrador** de RASTHOR·IA usando Cloudflare Workers AI y Llama 3.3
 - `POST /api/character-build`
 - `POST /api/gm`
 
-## Resiliencia del Narrador
+## Resiliencia v15
 
-La versión v13 está pensada para que la campaña no se congele si Workers AI tarda o devuelve JSON imperfecto.
+- Apertura de campaña con prompt y contrato reducidos, separados del turno normal.
+- Fallback contextual de apertura si Workers AI falla, para que la campaña nunca empiece con una pantalla vacía.
+- Detección de cuota (`3036`), capacidad (`3040`) y timeout.
+- No se lanza un segundo modelo cuando la cuenta ya agotó su cuota diaria, porque compartiría la misma cuota.
+- Reparaciones mecánicas sencillas se hacen determinísticamente, sin gastar otra inferencia.
+- Campaña aleatoria y constructor de personaje mantienen fallbacks locales.
+- Se aceptan GitHub Pages, `file://`, localhost y 127.0.0.1 para pruebas.
 
-- La respuesta principal intenta salida estructurada y después una recuperación JSON flexible.
-- El generador de campañas y el constructor de personaje tienen fallback y no deberían bloquear la creación por una caída temporal del modelo.
-- El turno del jugador se conserva si la IA no responde.
-- Preguntas y roleo normal continúan sin obligar una tirada D20.
-- El D20 se exige cuando hay incertidumbre, riesgo, oposición o una tarea que realmente lo justifique.
-- Se aceptan GitHub Pages y los orígenes locales usados para pruebas (`file://`, `localhost`, `127.0.0.1`).
+Cloudflare Workers AI aplica una cuota gratuita diaria compartida por cuenta. Si se agota, el juego mantiene un respaldo contextual hasta que la cuota se renueve.

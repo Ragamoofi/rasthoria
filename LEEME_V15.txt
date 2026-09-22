@@ -1,0 +1,23 @@
+RASTHOR·IA — FIX NARRADOR v15
+
+Esta corrección ataca el problema en el que una campaña nueva comienza únicamente con:
+“El Narrador tarda un instante en responder...”
+
+COPIAR / REEMPLAZAR en tu repositorio local RASTHORIA:
+- index.html
+- README.md
+- cloudflare-worker/README.md
+- cloudflare-worker/src/index.js
+
+Después:
+1. Abre GitHub Desktop.
+2. Revisa que aparezcan estos archivos modificados.
+3. Commit to main.
+4. Push origin.
+5. Espera a que terminen GitHub Pages y Workers Builds.
+6. Prueba creando UNA CAMPAÑA NUEVA (una partida antigua ya contiene el mensaje fallback guardado).
+
+IMPORTANTE:
+El backend del Narrador vive en Cloudflare Workers. Copiar los archivos sin hacer Push no cambia la IA publicada.
+
+La v15 usa Qwen3 30B-A3B FP8 como modelo principal y Gemma 4 26B A4B como respaldo de capacidad/JSON. Si la cuota diaria de Workers AI ya está agotada, el juego mostrará un aviso claro y una apertura contextual de respaldo en vez de quedarse mudo.

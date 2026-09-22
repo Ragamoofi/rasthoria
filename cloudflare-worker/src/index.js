@@ -1,5 +1,6 @@
-const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-22-rules-v13-narrador-resilience";
+const MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
+const FALLBACK_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+const BUILD = "2026-09-22-rules-v15-narrador-recovery";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -873,6 +874,64 @@ function semanticProblem(response,campaign) {
   return "";
 }
 
+function repairSemanticResponse(response,campaign,issue="") {
+  if(!response) return response;
+  const r={...response};
+  const cleanMechanical=()=>{
+    r.effects=(r.effects||[]).filter(e=>e.type==="item_rename");
+    r.encounter=null;
+    r.combatIntent=null;
+  };
+  if(campaign?.combat) {
+    const currentId=campaign.combat?.order?.[campaign.combat?.index]?.id;
+    if(currentId && currentId!=="player" && r.combatIntent?.action==="attack" && narrativeClaimsCombatHit(r.narrative)) {
+      const actor=(campaign.combat.actors||[]).find(a=>a.id===currentId);
+      r.narrative=[{kind:"narrator",speaker:"",text:`${actor?.name||"El adversario"} inicia el ataque. El motor resolverá primero si impacta y, solo entonces, el daño.`}];
+      return r;
+    }
+    if(currentId==="player" && combatPlayerActionLikelyNeedsD20(campaign) && !r.check) {
+      r.check=fallbackCheckForDeclaredAction(campaign);
+      r.narrative=[{kind:"narrator",speaker:"",text:"La maniobra empieza, pero su resultado todavía no está decidido. La tirada resolverá si consigues lo que intentas."}];
+      cleanMechanical();
+      return r;
+    }
+    if(r.check && narrativeClaimsCheckOutcome(r.narrative)) {
+      r.narrative=[{kind:"narrator",speaker:"",text:"La acción queda en el punto exacto en que puede salir bien o torcerse. La tirada decide lo que ocurre a continuación."}];
+      cleanMechanical();
+      return r;
+    }
+    return r;
+  }
+  if(isHostileDeclaration(campaign)) {
+    if(!r.encounter?.length) r.encounter=[{name:hostileTargetName(campaign),profile:"skirmisher",side:"enemy",tactic:"Reaccionar, defenderse y buscar una posición segura.",entityId:null,distance:3}];
+    r.check=null;
+    r.combatIntent=null;
+    r.effects=(r.effects||[]).filter(e=>e.type==="item_rename");
+    r.narrative=[{kind:"narrator",speaker:"",text:"Tu acción hostil rompe el equilibrio de la escena. El objetivo reacciona de inmediato; la iniciativa decidirá quién logra actuar primero."}];
+    return r;
+  }
+  if(actionLikelyNeedsD20(campaign) && !r.check) {
+    r.check=fallbackCheckForDeclaredAction(campaign);
+    r.narrative=[{kind:"narrator",speaker:"",text:"Tu intención está clara, pero el resultado todavía no. La situación queda suspendida justo antes de saber si lo consigues."}];
+    cleanMechanical();
+    return r;
+  }
+  if(r.check && narrativeClaimsCheckOutcome(r.narrative)) {
+    r.narrative=[{kind:"narrator",speaker:"",text:"El intento está en marcha, pero todavía no se conoce su desenlace. La tirada decidirá la consecuencia."}];
+    cleanMechanical();
+    return r;
+  }
+  if((isInformationalOrTrivialDeclaration(campaign)||isOrdinaryRoleplayDeclaration(campaign)) && r.check) {
+    r.check=null;
+    r.effects=(r.effects||[]).filter(e=>e.type==="item_rename");
+    r.encounter=null;
+    r.combatIntent=null;
+    return r;
+  }
+  console.warn("RASTHOR·IA semantic issue kept after deterministic repair",issue);
+  return r;
+}
+
 function normalizeResponse(raw, campaign) {
   const currentSummary = clip(campaign?.memory?.summary, 8000);
   const currentVault = clip(campaign?.gmVault, 14000);
@@ -918,7 +977,7 @@ function normalizeResponse(raw, campaign) {
 function emergencyNarradorResponse(campaign) {
   const combat=campaign?.combat||null;
   const currentId=combat?.order?.[combat?.index]?.id||null;
-  let narrative=[{kind:"narrator",speaker:"",text:"El Narrador tarda un instante en responder, pero el estado de la partida permanece intacto."}];
+  let narrative=[{kind:"narrator",speaker:"",text:"La escena permanece abierta exactamente donde quedó. El Narrador no logró completar esta respuesta, pero ninguna decisión, tirada ni consecuencia se perdió."}];
   let check=null, combatIntent=null, encounter=null;
 
   if (combat && currentId==="player") {
@@ -968,11 +1027,20 @@ function parseJSONLoose(value) {
   if (value && typeof value === "object") return value;
   if (typeof value !== "string") return null;
   let text = value.trim();
-  text = text.replace(/^\`\`\`(?:json)?\s*/i,"").replace(/\s*\`\`\`$/,"").trim();
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map(m=>m[1].trim()).reverse();
+  for (const candidate of fenced) {
+    try { return JSON.parse(candidate); } catch {}
+  }
+  text = text.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/i,"").trim();
   try { return JSON.parse(text); } catch {}
-  const start = text.indexOf("{"), end = text.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(text.slice(start,end+1)); } catch {}
+  const lastEnd = text.lastIndexOf("}");
+  if (lastEnd >= 0) {
+    const starts=[];
+    for(let i=0;i<=lastEnd;i++) if(text[i]==="{") starts.push(i);
+    for(let i=starts.length-1;i>=0;i--) {
+      try { return JSON.parse(text.slice(starts[i],lastEnd+1)); } catch {}
+    }
   }
   return null;
 }
@@ -982,72 +1050,286 @@ function modelResponseObject(result) {
   const candidates = [
     result.response,
     result.result?.response,
-    result.choices?.[0]?.message?.parsed,
     result.choices?.[0]?.message?.content,
-    result.output_text
+    result.choices?.[0]?.message?.parsed,
+    result.output_text,
+    result.content,
   ];
   for (const candidate of candidates) {
     const parsed = parseJSONLoose(candidate);
     if (parsed) return parsed;
   }
-  if (typeof result === "object" && !Array.isArray(result) && (result.narrative || result.memory)) return result;
+  if (typeof result === "object" && !Array.isArray(result) && (result.narrative || result.memory || result.premise || result.classId)) return result;
   return null;
 }
 
-async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.5,top_p=0.9,attempts=2,timeoutMs=22000}) {
-  const request = {
-    messages,
-    response_format: { type:"json_schema", json_schema:schema },
-    max_tokens,
-    temperature,
-    top_p,
-    repetition_penalty: 1.05,
-  };
-  let firstError = null;
-  const totalAttempts = Math.max(1, Math.min(2, Number(attempts) || 1));
-  for (let attempt=0; attempt<totalAttempts; attempt++) {
-    try {
-      const inference = env.AI.run(MODEL, {
-        ...request,
-        temperature: attempt === 0 ? temperature : 0.25,
-        max_tokens: attempt === 0 ? max_tokens : Math.min(max_tokens,760),
-      });
-      const result = await Promise.race([
-        inference,
-        new Promise((_,reject)=>setTimeout(()=>reject(new Error("AI_TIMEOUT")), Math.max(5000, Number(timeoutMs)||22000)))
-      ]);
-      const parsed = modelResponseObject(result);
-      if (parsed) return parsed;
-      firstError ||= new Error("EMPTY_OR_INVALID_JSON");
-    } catch (error) {
-      firstError ||= error;
-    }
-  }
-  throw firstError || new Error("STRUCTURED_OUTPUT_FAILED");
+function aiErrorText(error) {
+  try { return String(error?.message || error?.cause?.message || error || ""); } catch { return ""; }
+}
+function aiQuotaExceeded(error) {
+  const t=aiErrorText(error).toLowerCase();
+  return /(?:3036|daily free allocation|used up your daily|account limited|neuron)/.test(t);
+}
+function aiCapacityError(error) {
+  const t=aiErrorText(error).toLowerCase();
+  return /(?:3040|out of capacity|capacity temporarily exceeded|too many requests|429)/.test(t);
+}
+function aiTimeoutError(error) {
+  return /(?:ai_timeout|timeout|timed out|3007)/i.test(aiErrorText(error));
 }
 
+function withJsonInstruction(messages) {
+  const rule = `\n\nFORMATO OBLIGATORIO: responde SOLO con un objeto JSON válido. Sin markdown, sin bloques de código, sin análisis visible y sin texto antes o después del JSON.`;
+  const out=(Array.isArray(messages)?messages:[]).map(m=>({...m}));
+  const systemIndex=out.findIndex(m=>m.role==="system");
+  if(systemIndex>=0) out[systemIndex].content=String(out[systemIndex].content||"")+rule;
+  else out.unshift({role:"system",content:rule.trim()});
+  return out;
+}
 
-async function runLooseJSON(env, {messages,max_tokens=900,temperature=0.45,top_p=0.9,timeoutMs=10000}) {
-  const inference = env.AI.run(MODEL, {
-    messages:[
-      ...messages,
-      {role:"system",content:"Devuelve exclusivamente un único objeto JSON válido. No uses markdown, comentarios ni texto fuera del JSON."}
-    ],
-    max_tokens,
-    temperature,
-    top_p,
-    repetition_penalty:1.04,
-  });
-  const result = await Promise.race([
-    inference,
-    new Promise((_,reject)=>setTimeout(()=>reject(new Error("AI_TIMEOUT_LOOSE")), Math.max(5000,Number(timeoutMs)||10000)))
-  ]);
-  const parsed=modelResponseObject(result);
-  if(!parsed) throw new Error("LOOSE_JSON_FAILED");
+async function runModelJSON(env, {messages,max_tokens=900,temperature=0.5,top_p=0.9,timeoutMs=18000,allowFallback=true}) {
+  const prepared=withJsonInstruction(messages);
+  const models=allowFallback?[MODEL,FALLBACK_MODEL]:[MODEL];
+  let firstError=null;
+  for(let index=0;index<models.length;index++) {
+    const model=models[index];
+    try {
+      const inference=env.AI.run(model,{
+        messages:prepared,
+        max_tokens,
+        temperature:index===0?temperature:Math.min(temperature,0.48),
+        top_p,
+        repetition_penalty:1.04,
+      });
+      const result=await Promise.race([
+        inference,
+        new Promise((_,reject)=>setTimeout(()=>reject(new Error(`AI_TIMEOUT:${model}`)),Math.max(7000,Number(timeoutMs)||18000)))
+      ]);
+      const parsed=modelResponseObject(result);
+      if(parsed) return {parsed,model};
+      throw new Error(`EMPTY_OR_INVALID_JSON:${model}`);
+    } catch(error) {
+      firstError ||= error;
+      if(aiQuotaExceeded(error)) throw error;
+      // El segundo modelo sirve para JSON roto, timeout o falta temporal de capacidad.
+      if(index===models.length-1) throw firstError || error;
+    }
+  }
+  throw firstError || new Error("AI_JSON_FAILED");
+}
+
+async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.5,top_p=0.9,attempts=1,timeoutMs=18000}) {
+  // Compatibilidad para código antiguo. v15 evita JSON Mode porque limita la elección
+  // de modelos y consume demasiada cuota con el 70B; validamos y normalizamos nosotros.
+  const {parsed}=await runModelJSON(env,{messages,max_tokens,temperature,top_p,timeoutMs,allowFallback:true});
   return parsed;
 }
 
-function fallbackRandomCampaign(seed,prefs={}) {
+async function runLooseJSON(env, {messages,max_tokens=900,temperature=0.45,top_p=0.9,timeoutMs=18000}) {
+  const {parsed}=await runModelJSON(env,{messages,max_tokens,temperature,top_p,timeoutMs,allowFallback:true});
+  return parsed;
+}
+
+
+
+function isCampaignOpening(campaign) {
+  const messages=Array.isArray(campaign?.messages)?campaign.messages:[];
+  const event=plainText(campaign?.lastEvent||"");
+  return messages.length===0 || (Number(campaign?.revision||0)<=2 && /creacion de campana|primera escena|inicio de la campana/.test(event));
+}
+
+function openingFallbackTitle(campaign) {
+  const genre=clip(campaign?.config?.genre,80);
+  const setting=clip(campaign?.config?.setting,100);
+  if(genre && !/aventura libre|hibrid/i.test(genre)) return clip(`${genre}: Primer umbral`,90);
+  if(setting && !/mundo original/i.test(setting)) return clip(`El primer día en ${setting}`,90);
+  return "Donde empieza la historia";
+}
+
+function fallbackOpeningEvent(campaign,name,place) {
+  const genre=plainText(campaign?.config?.genre||"");
+  const fantasy=plainText(campaign?.config?.fantasy||"");
+  if(/superher|poder|metahuman/.test(`${genre} ${fantasy}`)) return `A pocos metros, todos los teléfonos empiezan a vibrar casi al mismo tiempo. Un video grabado hace segundos muestra algo físicamente imposible ocurriendo en ${place}. La gente se detiene, alguien grita y una sirena comienza a acercarse. Entre el ruido, hay un detalle que te resulta demasiado familiar.`;
+  if(/terror|horror/.test(genre)) return `Algo pequeño rompe la normalidad: un sonido que nadie más parece querer reconocer. Se repite. Esta vez más cerca. Cuando buscas su origen, descubres una señal concreta de que no es imaginación y de que alguien —o algo— sabe que estás aquí.`;
+  if(/noir|mister|crimen|detect/.test(genre)) return `Un desconocido deja algo a tu alcance y se marcha sin esperar respuesta. No parece un robo ni una amenaza improvisada. Hay un nombre, una hora y una prueba demasiado específica para ignorarla. Antes de que puedas decidir qué significa, notas que otra persona también estaba mirando.`;
+  if(/ciencia fic|sci|espacial/.test(genre)) return `Las pantallas cercanas se apagan durante tres segundos. Cuando vuelven, todas muestran la misma lectura imposible antes de corregirse. Casi nadie la alcanza a notar. Tú sí. Y un dispositivo cercano acaba de registrar que estuviste presente.`;
+  if(/cyber/.test(genre)) return `Una alerta privada atraviesa el ruido de la ciudad y aparece donde no debería poder aparecer. No trae remitente, pero incluye datos que solo tú reconocerías. Segundos después, alguien intenta borrar el mensaje de forma remota.`;
+  if(/espion/.test(genre)) return `Una persona cruza tu camino sin mirarte y deja caer un objeto aparentemente banal. Cuando lo recoges, descubres que estaba preparado para ti. Al otro lado de la calle, un vehículo que llevaba demasiado tiempo detenido enciende el motor.`;
+  if(/fantas/.test(genre)) return `Una señal imposible atraviesa la rutina del lugar: primero un silencio repentino, después una reacción en cadena entre quienes saben reconocerla. Algo que debía permanecer quieto acaba de cambiar, y varias miradas se vuelven hacia el mismo punto antes de que nadie se atreva a moverse.`;
+  if(/superviv/.test(genre)) return `La primera señal de que algo va mal parece menor: un servicio que deja de responder, una ruta que se corta, una persona que no llega. Luego aparece una segunda señal, demasiado rápida para ser casualidad. La gente alrededor todavía no entiende el problema completo.`;
+  if(/western/.test(genre)) return `El ruido habitual se corta cuando alguien llega con demasiada prisa y demasiado polvo encima. No viene buscando conversación: trae una noticia que cambia el equilibrio del lugar y varios presentes reaccionan antes de escucharla completa.`;
+  if(/deport|carrer/.test(genre)) return `Un rumor corre más rápido que cualquier anuncio oficial. Algo ha cambiado justo antes del momento que importa, y hay dos versiones incompatibles circulando. Una de ellas te involucra directamente.`;
+  return `Algo concreto rompe la rutina: una persona aparece donde no debería, trae información que te toca de cerca y se marcha antes de poder explicarla. Alrededor, el mundo sigue moviéndose como si nada, pero para ti la escena ya cambió.`;
+}
+
+function emergencyOpeningResponse(campaign, reason="") {
+  const c=campaign||{};
+  const ch=c.character||{};
+  const cfg=c.config||{};
+  const premise=clip(cfg.premise,2400) || "Algo acaba de cambiar y todavía no sabes hasta dónde llegará.";
+  const setting=clip(cfg.setting,180);
+  const era=clip(cfg.era,100);
+  const background=clip(ch.background,600);
+  const concept=clip(ch.concept,180);
+  const name=clip(ch.name,70)||"Tu personaje";
+  const place=(setting && !/mundo original/i.test(setting))?setting:"el lugar donde comienza todo";
+  const time=(era && !/cualquier epoca/i.test(plainText(era)) && !plainText(place).includes(plainText(era)))?` en ${era}`:"";
+  const first=`${name} está en ${place}${time}. La escena ya está viva antes de que hagas nada: voces, movimiento, objetos en uso y gente ocupada en sus propios problemas. Durante unos segundos parece un momento cualquiera.`;
+  const second=fallbackOpeningEvent(c,name,place);
+  const third=background
+    ? `Tu pasado sigue contigo: ${background.slice(0,430)} Nada de eso decide tu reacción. Frente a ti, la situación acaba de abrir varias posibilidades y ninguna está elegida todavía.`
+    : concept
+      ? `${concept.slice(0,320)} describe de dónde partes, no lo que estás obligado a hacer. Lo que acaba de ocurrir está frente a ti y el siguiente movimiento es completamente tuyo.`
+      : `No hay una acción correcta escrita de antemano. Puedes acercarte, ignorarlo, investigar, hablar, marcharte o intentar algo que nadie haya previsto.`;
+  return normalizeResponse({
+    title:openingFallbackTitle(c),
+    narrative:[
+      {kind:"narrator",speaker:"",text:first},
+      {kind:"narrator",speaker:"",text:second},
+      {kind:"narrator",speaker:"",text:third},
+    ],
+    check:null,effects:[],encounter:null,combatIntent:null,
+    memory:{
+      summary:`Inicio de campaña. ${premise.slice(0,900)}`,
+      entities:[],decision:null,flags:[],elapsedMinutes:0,
+      location:setting && !/mundo original/i.test(setting)?setting:(c?.memory?.location||"Por descubrir"),
+    },
+    safeRest:false,
+    privateMemory:c?.gmVault||`Premisa base: ${premise.slice(0,1800)}`,
+  },c);
+}
+
+async function generateOpening(env,campaign) {
+  const compact=publicCampaign(campaign);
+  const prompt=`ABRE ESTA CAMPAÑA DE RASTHOR·IA COMO UN NARRADOR DE ROL EXCELENTE.\n\nESTADO:\n${JSON.stringify(compact)}\n\nEscribe una primera escena inmersiva de 180 a 420 palabras. Debe comenzar DENTRO de la acción cotidiana del mundo, usar detalles sensoriales concretos, introducir un gancho que ocurra en escena y terminar con libertad total para actuar. No decidas acciones, emociones ni pensamientos del personaje. No pidas ninguna tirada todavía y no resuelvas secretos de la premisa.\n\nDevuelve EXACTAMENTE este objeto JSON:\n{\n  "title":"título evocador de 2 a 7 palabras",\n  "narrative":[{"kind":"narrator","speaker":"","text":"..."}],\n  "summary":"resumen público compacto del punto de partida",\n  "location":"ubicación inicial concreta",\n  "privateMemory":"secretos o planes iniciales del Narrador; puede quedar vacío"\n}\nLa lista narrative puede contener entre 2 y 5 bloques; si un NPC habla puedes usar kind=\"npc\" y speaker con su nombre.`;
+  const {parsed,model}=await runModelJSON(env,{
+    messages:[
+      {role:"system",content:"Eres el Narrador de una partida de rol abierta. Escribes español natural, cinematográfico y concreto. Nunca decides por el personaje del jugador."},
+      {role:"user",content:prompt}
+    ],
+    max_tokens:900,temperature:0.72,top_p:0.92,timeoutMs:16000,allowFallback:true
+  });
+  const narrative=Array.isArray(parsed?.narrative)?parsed.narrative:[];
+  if(!narrative.some(x=>x&&typeof x.text==="string"&&x.text.trim())) throw new Error("OPENING_EMPTY");
+  const response=normalizeResponse({
+    title:clip(parsed.title,90)||openingFallbackTitle(campaign),
+    narrative,
+    check:null,effects:[],encounter:null,combatIntent:null,
+    memory:{summary:clip(parsed.summary,8000),entities:[],decision:null,flags:[],elapsedMinutes:0,location:clip(parsed.location,150)||campaign?.memory?.location||"Por descubrir"},
+    safeRest:false,
+    privateMemory:clip(parsed.privateMemory,14000)||campaign?.gmVault||"",
+  },campaign);
+  return {response,model};
+}
+
+const CATEGORY_FALLBACKS = {
+  "Fantasía": {
+    setting:"Reinos de frontera, ciudades viejas y territorios donde lo sobrenatural tiene consecuencias concretas",era:"Era fantástica",tone:"Aventura con misterio y decisiones grises",fantasy:"Alta",themes:"poder, lealtad, secretos, facciones",
+    premises:[
+      "Una ciudad construida alrededor de un árbol petrificado despierta una mañana con todas sus campanas sonando solas. La nobleza culpa a los barrios bajos, los gremios cierran las puertas y tú recibes una llave que abre una cámara que oficialmente no existe.",
+      "En la frontera entre dos reinos aparece un puente de piedra durante una sola noche cada veinte años. Esta vez regresa antes de tiempo y trae de vuelta a una expedición que partió hace décadas sin haber envejecido un día.",
+      "Una feria ambulante llega a tu pueblo ofreciendo deseos pequeños y aparentemente inocentes. Al tercer día, cada deseo concedido empieza a cobrar un precio distinto y alguien cercano a ti aparece en la lista de próximos clientes."
+    ]
+  },
+  "Noir / misterio": {
+    setting:"Ciudad contemporánea densa, húmeda y llena de intereses cruzados",era:"Actualidad",tone:"Noir, tenso y humano",fantasy:"Realista o ambigua",themes:"mentiras, investigación, poder, culpa",
+    premises:[
+      "Una mujer te paga para encontrar a su hermano desaparecido. El problema es que él aparece esa misma noche en las cámaras de seguridad de tres lugares distintos, a la misma hora, dejando mensajes diferentes para ti.",
+      "Un periodista muere en un accidente que todos llaman rutinario. Horas después, recibes un sobre que él dejó programado para enviarte: contiene fotos de personas importantes reunidas en un edificio abandonado y una sola frase escrita a mano: «uno de ellos sabe tu nombre».",
+      "La policía cierra el caso de un robo sin víctimas, pero el dueño insiste en que no falta nada. Al revisar el lugar descubres que alguien entró solo para cambiar una fotografía familiar por otra casi idéntica, tomada años antes de que esa familia se conociera."
+    ]
+  },
+  "Ciencia ficción": {
+    setting:"Colonias, estaciones y rutas humanas lejos de la Tierra",era:"Futuro lejano",tone:"Ciencia ficción de aventura y misterio",fantasy:"Tecnología avanzada",themes:"identidad, exploración, tecnología, supervivencia",
+    premises:[
+      "Tu nave recibe una solicitud de atraque de una colonia que fue evacuada hace cuarenta años. Al aceptar, el sistema reconoce a toda tu tripulación como ciudadanos nacidos allí.",
+      "Una sonda minera regresa con un fragmento de material imposible de escanear. Antes de que puedas entregarlo, tres gobiernos, una corporación y una voz desconocida dentro de la propia sonda reclaman su propiedad.",
+      "En un puerto orbital, todos los relojes se adelantan exactamente nueve minutos durante una falla eléctrica. Solo tú recuerdas lo ocurrido en esos nueve minutos y sabes que alguien murió, aunque ahora esa persona sigue viva."
+    ]
+  },
+  "Cyberpunk": {
+    setting:"Megaciudad latinoamericana hiperconectada y desigual",era:"Futuro cercano",tone:"Crudo, urbano y veloz",fantasy:"Tecnología extrema",themes:"corporaciones, identidad, deuda, vigilancia",
+    premises:[
+      "Despiertas con una deuda que jamás pediste y un implante legalmente registrado a tu nombre que no está en tu cuerpo. Alguien lo está usando para cometer delitos y cada cámara de la ciudad cree que eres tú.",
+      "Un apagón de treinta segundos borra la identidad digital de miles de personas. La tuya permanece intacta, pero ahora figura como propietaria de una empresa fantasma que acaba de comprar un distrito entero.",
+      "Una empresa ofrece dinero por entregar a una IA fugitiva. Cuando logras contactarla, descubres que no vive en un servidor: está repartida entre los dispositivos domésticos de un barrio que será demolido mañana."
+    ]
+  },
+  "Superhéroes": {
+    setting:"Ciudad moderna donde los poderes todavía están cambiando la sociedad",era:"Actualidad alternativa",tone:"Épico, humano y con consecuencias",fantasy:"Poderes recientes",themes:"identidad, poder, opinión pública, responsabilidad",
+    premises:[
+      "Hace semanas desarrollaste una capacidad imposible que aún no controlas. Hoy aparece un video de una persona usando exactamente tu mismo poder durante un crimen, y alguien deja en tu puerta una nota: «sé que ese no eras tú».",
+      "Los primeros superhumanos del país deben registrarse por ley. El día antes de que venza el plazo, tus poderes aparecen en público al salvar a alguien, pero el registro oficial ya contiene una ficha completa con tu nombre, fotografía y habilidades que tú nunca entregaste.",
+      "Una figura enmascarada lleva meses salvando gente y se ha convertido en símbolo nacional. Durante un rescate, descubres que obtiene sus poderes drenando lentamente a otras personas como tú, y ahora quiere convertirte en su socio."
+    ]
+  },
+  "Espionaje": {
+    setting:"Capitales, aeropuertos y fronteras donde nadie cuenta toda la verdad",era:"Contemporánea",tone:"Thriller paranoico",fantasy:"Realista",themes:"lealtad, información, engaño, identidad",
+    premises:[
+      "Recibes por error una llamada cifrada destinada a un agente encubierto. La voz al otro lado te da instrucciones que describen exactamente dónde estás y termina diciendo que tienes doce minutos antes de que alguien vaya por ti.",
+      "Una lista de informantes desaparece durante una cumbre internacional. Todos creen que la robaste porque las cámaras muestran tu rostro, pero tú estabas a kilómetros de distancia y solo una persona puede demostrarlo: alguien a quien juraste no volver a ver.",
+      "Un diplomático desaparece en un aeropuerto sin activar ninguna alarma. Su equipaje llega a tu casa antes de que la noticia sea pública, con un pasaporte a tu nombre y una fotografía tuya tomada en un país donde nunca has estado."
+    ]
+  },
+  "Terror": {
+    setting:"Entorno cotidiano que se vuelve gradualmente imposible",era:"Actualidad",tone:"Horror progresivo y psicológico",fantasy:"Ambigua",themes:"miedo, memoria, aislamiento, verdad",
+    premises:[
+      "Cada noche a las 03:12 alguien toca tres veces tu puerta. La cámara nunca muestra a nadie. La cuarta noche, el video sí muestra una figura: eres tú mismo, vestido con ropa que no tienes.",
+      "Un edificio entero despierta sin poder recordar al vecino del departamento 404. El problema es que todas las fotos, contratos y mensajes prueban que cada residente tenía una relación distinta con esa persona.",
+      "Durante un viaje por carretera encuentras una estación de servicio abierta en medio de la nada. El dependiente te entrega el vuelto exacto de una compra que todavía no has hecho y te suplica que esta vez no entres al baño."
+    ]
+  },
+  "Vida real": {
+    setting:"Ciudad contemporánea y problemas humanos reconocibles",era:"Actualidad",tone:"Humano, íntimo y reactivo",fantasy:"Ninguna",themes:"amistad, trabajo, relaciones, dinero, decisiones",
+    premises:[
+      "Te ofrecen el trabajo que llevas años esperando, pero exige mudarte en una semana. Esa misma noche una persona importante para ti revela que necesita ayuda con algo que podría cambiarle la vida.",
+      "Tu grupo de amigos encuentra por casualidad una vieja grabación de cuando eran adolescentes. En ella aparece una promesa que ninguno recuerda haber hecho y una persona que dejó de hablarles hace años acaba de volver a la ciudad.",
+      "Un pequeño negocio familiar recibe una oferta de compra imposible de rechazar. El dinero resolvería casi todos los problemas, pero vender significa despedir a gente que conoces de toda la vida y descubrir por qué una empresa tan grande quiere precisamente ese lugar."
+    ]
+  },
+  "Supervivencia": {
+    setting:"Zona aislada con recursos limitados y ayuda incierta",era:"Actualidad",tone:"Tenso y realista",fantasy:"Ninguna",themes:"supervivencia, cooperación, moralidad, recursos",
+    premises:[
+      "Una tormenta destruye la única carretera que conecta un pueblo con el exterior. La ayuda tardará días y el generador del hospital solo tiene combustible para una noche. Tres grupos distintos aseguran tener derecho al último depósito de combustible cercano.",
+      "Tras un accidente aéreo, un pequeño grupo queda aislado en una zona montañosa. Hay comida para pocos días y una radio que funciona solo unos minutos por jornada, pero alguien ha estado usándola a escondidas durante la noche.",
+      "Un incendio forestal cambia de dirección y corta todas las rutas de evacuación. Un refugio cercano puede resistir, pero no tiene espacio para todos los que están llegando y nadie sabe si la información oficial sigue siendo válida."
+    ]
+  },
+  "Western": {
+    setting:"Frontera polvorienta donde la ley llega tarde",era:"Finales del siglo XIX",tone:"Serio, áspero y de personajes",fantasy:"Realista",themes:"ley, ambición, reputación, violencia",
+    premises:[
+      "Un tren llega al pueblo sin conductor y con todos sus pasajeros vivos, pero ninguno recuerda las últimas seis horas. En uno de los vagones hay una caja fuerte abierta y el mapa de una mina que oficialmente nunca existió.",
+      "El nuevo juez ofrece una recompensa por un forajido al que todos creen muerto. Esa misma tarde, el supuesto cadáver aparece en tu puerta pidiéndote ayuda y afirma que el verdadero criminal lleva años viviendo bajo otro nombre.",
+      "Una compañía ferroviaria compra casi todas las tierras del valle. La única familia que se niega a vender desaparece durante la noche y varias personas poderosas quieren que aceptes versiones muy distintas de lo ocurrido."
+    ]
+  }
+};
+
+function fallbackRandomCampaign(seed,prefs={},category="",exclude="") {
+  const categoryPack=CATEGORY_FALLBACKS[category];
+  if(categoryPack){
+    const excluded=plainText(exclude).trim();
+    let candidates=categoryPack.premises.filter(p=>plainText(p).trim()!==excluded);
+    if(!candidates.length) candidates=categoryPack.premises.slice();
+    const bytes=new Uint32Array(1);crypto.getRandomValues(bytes);
+    const premise=candidates[bytes[0]%candidates.length];
+    return {
+      premise,
+      genre:category,
+      setting:categoryPack.setting,
+      era:categoryPack.era,
+      tone:categoryPack.tone,
+      fantasy:categoryPack.fantasy,
+      combat:Number.isFinite(Number(prefs?.combat))?Math.max(0,Math.min(5,Number(prefs.combat))):(category==="Superhéroes"?4:2),
+      exploration:Number.isFinite(Number(prefs?.exploration))?Math.max(0,Math.min(5,Number(prefs.exploration))):3,
+      conversation:Number.isFinite(Number(prefs?.conversation))?Math.max(0,Math.min(5,Number(prefs.conversation))):4,
+      mystery:Number.isFinite(Number(prefs?.mystery))?Math.max(0,Math.min(5,Number(prefs.mystery))):3,
+      difficulty:["amable","equilibrada","exigente"].includes(prefs?.difficulty)?prefs.difficulty:"equilibrada",
+      mortality:["permanente","consecuencias"].includes(prefs?.mortality)?prefs.mortality:"consecuencias",
+      duration:clip(prefs?.duration,100)||"Campaña abierta",
+      themes:categoryPack.themes
+    };
+  }
   const ideas=[
     {genre:"Misterio contemporáneo",setting:"Santiago bajo una lluvia fuera de temporada",era:"Actualidad",tone:"Tenso, humano y callejero",fantasy:"Baja o incierta",premise:"Una noche, todas las pantallas de una estación de Metro muestran durante once segundos el mismo video: tú entrando a un edificio que nunca has visitado. A la mañana siguiente, una desconocida te reconoce por ese registro y asegura que alguien desapareció allí. Nadie más parece conservar la grabación.",themes:"identidad, vigilancia, confianza, ciudad, secretos"},
     {genre:"Ciencia ficción",setting:"Puerto orbital de carga en el borde del sistema",era:"Siglo XXIV",tone:"Aventura sucia con humor y peligro",fantasy:"Tecnología avanzada",premise:"Tu turno de trabajo debía terminar con una inspección rutinaria, pero un contenedor sin propietario empieza a transmitir una señal usando tu nombre. La aduana quiere abrirlo, una tripulación rival ofrece pagarte por hacerlo desaparecer y el manifiesto oficial dice que ese contenedor no existe.",themes:"lealtad, dinero, tecnología, supervivencia"},
@@ -1080,12 +1362,24 @@ function fallbackRandomCampaign(seed,prefs={}) {
 }
 
 function fallbackCharacterBuild({concept="",premise="",ancestry="",background=""}={}) {
-  const text=plainText(`${concept} ${premise} ${background}`);
+  const text=plainText(`${concept} ${background} ${premise}`);
   let classId="rogue",priority=["DEX","INT","WIS","CHA","CON","STR"];
-  if(/\b(fuerte|soldad|boxe|luch|guerr|militar|tanque|resistente|fisico|fisica)\b/.test(text)){classId="warrior";priority=["STR","CON","DEX","WIS","CHA","INT"]}
-  else if(/\b(medic|doctor|enfermer|paramedic|lider|protector|apoyo|sanador)\b/.test(text)){classId="cleric";priority=["WIS","CHA","CON","INT","DEX","STR"]}
-  else if(/\b(mag|poder|psionic|tecnolog|cientific|hacker|mutacion|energia)\b/.test(text)){classId="mage";priority=["INT","WIS","DEX","CON","CHA","STR"]}
-  return {classId,priority,ancestry:ancestry||"Humano",background:background||concept||"Una historia todavía por definir.",languages:["Común"],reason:"Configuración de respaldo coherente con el concepto para que la creación nunca se bloquee."};
+  if(/\b(?:medic\w*|doctor\w*|enfermer\w*|paramedic\w*|sanador\w*|terapeut\w*|protector\w*|lider\w*|diplomatic\w*)\b/.test(text)) {
+    classId="cleric"; priority=["WIS","CHA","CON","INT","DEX","STR"];
+  } else if(/\b(?:mago\w*|hechicer\w*|brujo\w*|psionic\w*|telepat\w*|mutan\w*|superpoder\w*|poderes?\b|energia\w*|sobrehuman\w*)/.test(text)) {
+    classId="mage"; priority=["INT","WIS","CON","DEX","CHA","STR"];
+  } else if(/\b(?:soldad\w*|militar\w*|boxe\w*|luchador\w*|peleador\w*|guerrer\w*|guardia\w*|fuerte\b|fisic\w*|atleta\w*|rugby\w*)/.test(text)) {
+    classId="warrior"; priority=["STR","CON","DEX","WIS","CHA","INT"];
+  } else if(/\b(?:detective\w*|investigador\w*|periodista\w*|cientific\w*|academ\w*|profesor\w*)/.test(text)) {
+    classId="rogue"; priority=["INT","WIS","DEX","CHA","CON","STR"];
+  } else if(/\b(?:hacker\w*|programador\w*|ingenier\w*|mecanic\w*|tecnic\w*|piloto\w*)/.test(text)) {
+    classId="rogue"; priority=["INT","DEX","WIS","CON","CHA","STR"];
+  } else if(/\b(?:ladron\w*|espia\w*|agente\w*|tirador\w*|francotirador\w*|acrobata\w*|sigil\w*)/.test(text)) {
+    classId="rogue"; priority=["DEX","WIS","INT","CON","CHA","STR"];
+  } else if(/\b(?:actor\w*|cantante\w*|musico\w*|vendedor\w*|politic\w*|influencer\w*|negociador\w*)/.test(text)) {
+    classId="rogue"; priority=["CHA","WIS","DEX","INT","CON","STR"];
+  }
+  return {classId,priority,ancestry:ancestry||"Humano",background:background||concept||"Una historia todavía por definir.",languages:["Común"],reason:"Asignación de respaldo basada en profesión, entrenamiento, pasado y lógica de atributos de juegos de rol."};
 }
 
 export default {
@@ -1100,19 +1394,21 @@ export default {
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/connection")) {
       if (url.pathname === "/api/connection") {
-        return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
+        return json({connected:true,model:"Qwen3 30B-A3B · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
       }
-      return json({ok:true,service:"RASTHOR·IA Cloud DM",model:MODEL,build:BUILD},200,origin);
+      return json({ok:true,service:"RASTHOR·IA Narrador",model:MODEL,build:BUILD},200,origin);
     }
 
     if (url.pathname === "/api/connection" && (request.method === "POST" || request.method === "DELETE")) {
-      return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
+      return json({connected:true,model:"Qwen3 30B-A3B · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
     }
 
     if (request.method === "POST" && url.pathname === "/api/random-campaign") {
       let body = {};
       try { body = await request.json(); } catch {}
       const seed = clip(body?.seed, 1200);
+      const category = clip(body?.category, 80);
+      const exclude = clip(body?.exclude, 3500);
       const prefs = body?.preferences && typeof body.preferences === "object" ? body.preferences : {};
       const randomToken = crypto.randomUUID();
       const prompt = `Inventa UNA premisa nueva y jugable para RASTHOR·IA.
@@ -1130,9 +1426,12 @@ La premisa debe:
 - variar de escala: no siempre salvar el mundo.
 
 Semilla de variedad: ${randomToken}
+Categoría obligatoria si se indicó: ${category || "ninguna; tienes libertad total"}
 Idea escrita por el usuario, si existe: ${seed || "ninguna"}
+Idea anterior que NO debes continuar, ampliar ni repetir: ${exclude || "ninguna"}
 Preferencias actuales: ${JSON.stringify(prefs).slice(0,2500)}
 
+REGLA DE VARIEDAD: si existe una idea anterior, crea otra aventura realmente distinta. No hagas una secuela, no agregues párrafos al texto anterior y no recicles el mismo gancho cambiando nombres. Si hay categoría obligatoria, mantente dentro de ella pero cambia conflicto, lugar, escala y tipo de problema.
 Devuelve solo el JSON solicitado.`;
       let parsed=null, degraded=false;
       const campaignMessages=[
@@ -1140,22 +1439,16 @@ Devuelve solo el JSON solicitado.`;
         {role:"user",content:prompt}
       ];
       try {
-        parsed = await runStructured(env,{messages:campaignMessages,schema:RANDOM_CAMPAIGN_SCHEMA,max_tokens:720,temperature:0.82,top_p:0.94,attempts:1,timeoutMs:12000});
-      } catch (firstError) {
-        console.warn("RASTHOR·IA random campaign structured fallback",firstError);
-        try {
-          parsed = await runLooseJSON(env,{messages:campaignMessages,max_tokens:720,temperature:0.78,top_p:0.93,timeoutMs:8000});
-          degraded=true;
-        } catch (secondError) {
-          console.warn("RASTHOR·IA random campaign local fallback",secondError);
-          parsed=fallbackRandomCampaign(seed,prefs);
-          degraded=true;
-        }
+        parsed = await runLooseJSON(env,{messages:campaignMessages,max_tokens:720,temperature:0.82,top_p:0.94,timeoutMs:15000});
+      } catch (error) {
+        console.warn("RASTHOR·IA random campaign local fallback",error);
+        parsed=fallbackRandomCampaign(seed,prefs,category,exclude);
+        degraded=true;
       }
-      if (!parsed || typeof parsed!=="object") { parsed=fallbackRandomCampaign(seed,prefs); degraded=true; }
+      if (!parsed || typeof parsed!=="object") { parsed=fallbackRandomCampaign(seed,prefs,category,exclude); degraded=true; }
       return json({campaign:{
         premise:clip(parsed.premise,3500),
-        genre:clip(parsed.genre,100),
+        genre:category || clip(parsed.genre,100),
         setting:clip(parsed.setting,180),
         era:clip(parsed.era,100),
         tone:clip(parsed.tone,120),
@@ -1202,9 +1495,19 @@ El motor tiene cuatro bases MECÁNICAS, no profesiones medievales:
 - mage = Canalizador: poder especial, tecnología avanzada, psiónica, mutación, magia o intelecto ofensivo.
 - cleric = Protector: medicina, apoyo, liderazgo, defensa, recuperación.
 
-Elige classId por cómo funcionaría el personaje, no por estética.
-priority debe contener STR, DEX, CON, INT, WIS y CHA ordenadas desde la característica más importante a la menos importante. El juego asignará 15,14,13,12,10,8 en ese orden.
-Si la historia es realista, no inventes magia. ancestry debe respetar lo escrito por el usuario; solo sugiere algo si estaba genérico. background puede ampliar brevemente el concepto sin decidir eventos importantes por el jugador.
+Elige classId por cómo funcionaría el personaje, no por estética. Esta base es INTERNA y el jugador no la elige ni tiene por qué verla.
+
+Para priority compórtate como un diseñador veterano de RPG de mesa y d20:
+- usa STR para fuerza física, potencia corporal y atletismo;
+- DEX para reflejos, precisión, sigilo, coordinación y manejo fino;
+- CON para resistencia, dureza, salud y aguante;
+- INT para conocimiento, investigación, lógica, ciencia y técnica;
+- WIS para percepción, intuición, lectura de personas, criterio y supervivencia;
+- CHA para presencia, liderazgo, persuasión, engaño y actuación.
+
+Lee con atención oficio/concepto, entrenamiento, poderes, personalidad y PASADO. Prioriza las características que de verdad explican cómo ese personaje resolvería problemas. Un detective suele valorar INT/WIS; un boxeador STR/CON; un piloto DEX/INT o DEX/WIS; un médico WIS/INT; un hacker INT/DEX; un líder CHA/WIS. Un personaje con poderes no debe recibir automáticamente INT alta: depende de cómo funcionen sus poderes y de su historia.
+priority debe contener STR, DEX, CON, INT, WIS y CHA una sola vez, ordenadas desde la más importante a la menos importante. El juego asignará 15,14,13,12,10,8 en ese orden.
+Si la historia es realista, no inventes magia. ancestry debe respetar lo escrito por el usuario; solo sugiere algo si estaba genérico. background puede completar un campo vacío, pero nunca reescribas ni contradigas un pasado que el jugador ya escribió.
 Devuelve solo el JSON solicitado.`;
       let parsed=null,degraded=false;
       const buildMessages=[
@@ -1212,11 +1515,11 @@ Devuelve solo el JSON solicitado.`;
         {role:"user",content:prompt}
       ];
       try {
-        parsed=await runStructured(env,{messages:buildMessages,schema:CHARACTER_BUILD_SCHEMA,max_tokens:480,temperature:0.45,top_p:0.88,attempts:1,timeoutMs:11000});
-      } catch(firstError) {
-        console.warn("RASTHOR·IA character structured fallback",firstError);
-        try { parsed=await runLooseJSON(env,{messages:buildMessages,max_tokens:480,temperature:0.35,top_p:0.84,timeoutMs:7000}); degraded=true; }
-        catch(secondError) { console.warn("RASTHOR·IA character local fallback",secondError); parsed=fallbackCharacterBuild({concept,premise,ancestry,background}); degraded=true; }
+        parsed=await runLooseJSON(env,{messages:buildMessages,max_tokens:480,temperature:0.45,top_p:0.88,timeoutMs:14000});
+      } catch(error) {
+        console.warn("RASTHOR·IA character local fallback",error);
+        parsed=fallbackCharacterBuild({concept,premise,ancestry,background});
+        degraded=true;
       }
       if(!parsed||typeof parsed!=="object") { parsed=fallbackCharacterBuild({concept,premise,ancestry,background}); degraded=true; }
       const abilities=["STR","DEX","CON","INT","WIS","CHA"];
@@ -1244,6 +1547,17 @@ Devuelve solo el JSON solicitado.`;
     const campaign = body?.campaign;
     if (!campaign || typeof campaign !== "object") return json({error:"Missing campaign"},400,origin);
     const repairHint = clip(body?.repairHint, 700);
+
+    if (isCampaignOpening(campaign)) {
+      try {
+        const opening=await generateOpening(env,campaign);
+        return json({response:opening.response,vault:opening.response.privateMemory,model:opening.model,opening:true},200,origin);
+      } catch (openingError) {
+        console.error("RASTHOR·IA opening generation error",openingError);
+        const fallback=emergencyOpeningResponse(campaign,aiErrorText(openingError));
+        return json({response:fallback,vault:fallback.privateMemory,degraded:true,degradedReason:aiQuotaExceeded(openingError)?"quota":aiCapacityError(openingError)?"capacity":aiTimeoutError(openingError)?"timeout":"opening_error",opening:true},200,origin);
+      }
+    }
 
     const compact = publicCampaign(campaign);
     const isOpening = Number(compact.revision||0) <= 1 && (compact.messages?.length||0) <= 3;
@@ -1277,51 +1591,22 @@ Devuelve solo el JSON solicitado.`;
         {role:"system",content:SYSTEM},
         {role:"user",content:userPrompt},
       ];
-      let parsed;
-      try {
-        parsed = await runStructured(env,{messages:turnMessages,schema:RESPONSE_SCHEMA,max_tokens:isOpening?1250:1100,temperature:isOpening?0.66:0.58,top_p:0.91,attempts:1,timeoutMs:13000});
-      } catch(primaryError) {
-        console.warn("RASTHOR·IA Narrador structured fallback",primaryError);
-        parsed = await runLooseJSON(env,{messages:turnMessages,max_tokens:isOpening?1250:1100,temperature:isOpening?0.58:0.5,top_p:0.9,timeoutMs:9000});
-      }
+      let parsed = await runLooseJSON(env,{messages:turnMessages,max_tokens:isOpening?950:900,temperature:isOpening?0.66:0.58,top_p:0.91,timeoutMs:17000});
       let response = normalizeResponse(parsed,campaign);
       const semanticIssue = semanticProblem(response,campaign);
       if (semanticIssue) {
         console.warn("RASTHOR·IA semantic repair:",semanticIssue);
-        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno corrigiendo únicamente el problema indicado. Pide D20 solo si existe incertidumbre real, oposición, riesgo o una tarea técnica; conversación normal, preguntas y roleo libre deben continuar sin tirada. Si es un ataque contra alguien capaz de reaccionar y no hay combate, encounter DEBE contener al menos un adversario.`;
-        const repairMessages=[
-          {role:"system",content:SYSTEM},
-          {role:"user",content:repairPrompt},
-        ];
-        try {
-          parsed = await runStructured(env,{messages:repairMessages,schema:RESPONSE_SCHEMA,max_tokens:1050,temperature:0.35,top_p:0.86,attempts:1,timeoutMs:9000});
-        } catch(repairError) {
-          console.warn("RASTHOR·IA Narrador semantic loose fallback",repairError);
-          parsed = await runLooseJSON(env,{messages:repairMessages,max_tokens:1050,temperature:0.3,top_p:0.84,timeoutMs:7000});
-        }
-        response = normalizeResponse(parsed,campaign);
-        const secondIssue=semanticProblem(response,campaign);
-        if(secondIssue) {
-          const needsFallback=actionLikelyNeedsD20(campaign)||combatPlayerActionLikelyNeedsD20(campaign);
-          if(needsFallback) {
-            console.warn("RASTHOR·IA fallback d20:",secondIssue);
-            response.narrative=[{kind:"narrator",speaker:"",text:"Tu intención queda planteada. Antes de conocer el resultado, la situación depende de la tirada."}];
-            response.check=fallbackCheckForDeclaredAction(campaign);
-            response.effects=(response.effects||[]).filter(e=>e.type==="item_rename");
-            response.encounter=null;
-            response.combatIntent=null;
-          } else {
-            throw new Error("SEMANTIC_RULE_FAILURE: "+secondIssue);
-          }
-        }
+        response=repairSemanticResponse(response,campaign,semanticIssue);
+        response=normalizeResponse(response,campaign);
       }
       return json({response,vault:response.privateMemory},200,origin);
     } catch (error) {
       console.error("RASTHOR·IA Workers AI error",error);
       try {
         const fallback=emergencyNarradorResponse(campaign);
-        console.warn("RASTHOR·IA emergency Narrador fallback active");
-        return json({response:fallback,vault:fallback.privateMemory,degraded:true},200,origin);
+        const degradedReason=aiQuotaExceeded(error)?"quota":aiCapacityError(error)?"capacity":aiTimeoutError(error)?"timeout":"ai_error";
+        console.warn("RASTHOR·IA emergency Narrador fallback active",degradedReason);
+        return json({response:fallback,vault:fallback.privateMemory,degraded:true,degradedReason},200,origin);
       } catch (fallbackError) {
         console.error("RASTHOR·IA emergency fallback error",fallbackError);
         return json({error:"El Narrador no pudo completar este turno. Tu acción sigue guardada para reintentar."},503,origin);

@@ -2,32 +2,35 @@
 
 **Tu historia aún no ha sido escrita.**
 
-RPG narrativo dinámico con campañas libres, memoria persistente, consecuencias, combate d20 y un Narrador IA en la nube.
+RPG narrativo dinámico con campañas libres, memoria persistente, consecuencias, combate d20 y un **Narrador IA** en la nube.
 
 ## Archivos principales
 
 - `index.html` — juego web autocontenido.
 - `assets/dice-roulette.css` — aspecto visual de los dados tipo ruleta interna.
-- `assets/dice-roulette.js` — animación de números y sincronización con el resultado real del motor.
-- `DADOS_RULETA_LAB.html` — laboratorio visual para probar D4, D6, D8, D10, D12, D20, ventaja y varias tiradas.
+- `assets/dice-roulette.js` — animación de números sincronizada con el resultado real del motor.
+- `DADOS_RULETA_LAB.html` — laboratorio visual de dados.
 - `cloudflare-worker/` — backend del Narrador mediante Cloudflare Workers AI.
 
-## Narrador IA
+## Narrador IA v15
 
 Worker de producción:
 
 `https://rasthoria-cloud-dm.o-sariego.workers.dev`
 
-Modelo actual: **Llama 3.3 70B Fast** mediante Workers AI.
+Modelos configurados:
 
-La versión v13 del Worker añade:
+- principal: **Qwen3 30B-A3B FP8**;
+- respaldo de capacidad/JSON: **Gemma 4 26B A4B**.
 
-- compatibilidad con pruebas locales (`file://`, localhost y 127.0.0.1);
-- generación de campaña con dos rutas de IA y un fallback para no bloquear la creación;
-- creación de ficha con fallback;
-- respuestas del Narrador con salida estructurada y recuperación JSON flexible;
-- roleo y preguntas normales sin tiradas D20 obligatorias;
-- D20 reservado para incertidumbre, riesgo, oposición o tareas realmente resolubles por dados;
-- recuperación segura del turno cuando el modelo no responde.
+La v15 está enfocada en que una caída o demora de Workers AI no deje la campaña muda:
+
+- la primera escena usa una ruta propia, más corta y robusta;
+- si toda la IA falla al abrir una campaña, se genera una apertura contextual de respaldo en vez del mensaje genérico de espera;
+- las respuestas JSON se validan localmente sin depender del modo JSON estricto de un único modelo;
+- se evita gastar otra llamada de IA solo para reparar errores semánticos sencillos;
+- el frontend muestra si el problema fue cuota, capacidad o timeout en vez de ocultarlo;
+- preguntas y roleo normal no fuerzan D20; el dado se reserva para incertidumbre, riesgo, oposición o tareas técnicas;
+- el turno del jugador se conserva si la IA no responde.
 
 Los jugadores no necesitan iniciar sesión en ChatGPT ni pegar una API key.
