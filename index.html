@@ -88,6 +88,189 @@
 .rolling-overlay .roll-overlay-copy strong{font-family:Georgia,"Times New Roman",serif;font-size:20px;color:#f0d6a3;font-weight:600}
 .rolling-overlay .roll-overlay-copy span{font-size:13px;color:#c7b89f;letter-spacing:.25px;font-variant-numeric:tabular-nums}
 </style>
+
+<style id="rasthoria-voice-narrator-v1">
+/* RASTHOR·IA — narrator + creator signature */
+.ras-credit-home{
+  margin-top:12px;
+  color:#887d70;
+  letter-spacing:1.4px;
+  font-size:11px;
+  font-style:italic;
+}
+.ras-credit-home strong{color:#b89a72;font-weight:500}
+.ras-credit-chat{
+  color:#6f6875;
+  text-align:center;
+  letter-spacing:1.2px;
+  font-size:9px;
+  line-height:1;
+  margin-top:9px;
+  user-select:none;
+}
+.ras-credit-chat strong{color:#8f7b63;font-weight:500}
+.ras-voice-main,.ras-voice-config{
+  white-space:nowrap;
+}
+.ras-voice-main b{
+  color:#857b8c;
+  letter-spacing:.8px;
+  font-size:9px;
+  font-weight:600;
+}
+.ras-voice-main.is-on{color:#d4b47f!important}
+.ras-voice-main.is-on b{color:#9fbd9f}
+.ras-voice-main.is-speaking{color:#ead09f!important}
+.ras-voice-config{
+  opacity:.82;
+}
+.ras-listen-message{
+  color:#8f8295!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:5px;
+  margin-left:auto;
+  padding:2px 5px!important;
+  font-size:13px!important;
+  line-height:1!important;
+  opacity:.42;
+  transition:opacity .16s ease,color .16s ease,background .16s ease!important;
+}
+.message:hover .ras-listen-message,.message-npc:hover .ras-listen-message,
+.ras-listen-message:focus-visible,.ras-listen-message.is-speaking{
+  opacity:1;
+  color:#d2b07a!important;
+  background:#2a2527!important;
+}
+.ras-voice-popover{
+  position:fixed;
+  z-index:10000;
+  width:min(330px,calc(100vw - 24px));
+  color:#d8d1d8;
+  background:linear-gradient(145deg,#201d24,#17171c);
+  border:1px solid #494049;
+  border-radius:10px;
+  box-shadow:0 18px 60px #0009;
+  padding:16px;
+  font-family:Arial,Helvetica,sans-serif;
+}
+.ras-voice-popover[hidden]{display:none!important}
+.ras-voice-popover h3{
+  color:#e5d5bb;
+  font:20px/1.2 Georgia,Times New Roman,serif;
+  margin:0 0 5px;
+}
+.ras-voice-popover .ras-voice-sub{
+  color:#918997;
+  font-size:11px;
+  line-height:1.45;
+  margin-bottom:14px;
+}
+.ras-voice-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:11px;
+}
+.ras-voice-row>label{
+  color:#aaa0ad;
+  font-size:11px;
+  flex:0 0 88px;
+}
+.ras-voice-row select,.ras-voice-row input[type="range"]{
+  min-width:0;
+  flex:1;
+}
+.ras-voice-row select{
+  color:#d9d1da;
+  background:#121318;
+  border:1px solid #3d3941;
+  border-radius:6px;
+  padding:8px 9px;
+  font-size:11px;
+}
+.ras-voice-row input[type="range"]{accent-color:#c5a477}
+.ras-voice-toggleline{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 0;
+  border-top:1px solid #302d34;
+  border-bottom:1px solid #302d34;
+}
+.ras-voice-toggleline span{
+  color:#b7acba;
+  font-size:12px;
+}
+.ras-switch{
+  position:relative;
+  width:38px;
+  height:21px;
+  flex:0 0 auto;
+}
+.ras-switch input{position:absolute;opacity:0;pointer-events:none}
+.ras-switch i{
+  position:absolute;inset:0;
+  background:#39343d;
+  border:1px solid #4e4652;
+  border-radius:999px;
+  transition:.18s ease;
+}
+.ras-switch i:after{
+  content:"";
+  position:absolute;
+  width:15px;height:15px;
+  left:2px;top:2px;
+  border-radius:50%;
+  background:#968c9c;
+  transition:.18s ease;
+}
+.ras-switch input:checked+i{
+  background:#594a37;
+  border-color:#8b714f;
+}
+.ras-switch input:checked+i:after{
+  transform:translateX(17px);
+  background:#dfc18f;
+}
+.ras-voice-actions{
+  display:flex;
+  gap:8px;
+  margin-top:14px;
+}
+.ras-voice-actions button{
+  flex:1;
+  color:#bfb4c2;
+  background:#242129;
+  border:1px solid #3e3942;
+  border-radius:6px;
+  padding:9px 8px;
+  font-size:11px;
+}
+.ras-voice-actions button:hover{color:#ead4ae;border-color:#665743}
+.ras-voice-actions button:disabled{opacity:.35}
+.ras-voice-unsupported{
+  color:#c89999;
+  background:#2a1d21;
+  border:1px solid #56393f;
+  border-radius:6px;
+  padding:9px 10px;
+  font-size:11px;
+  line-height:1.45;
+  margin-top:10px;
+}
+@media (max-width:760px){
+  .ras-credit-home{font-size:10px;margin-top:9px}
+  .ras-credit-chat{margin-top:7px;font-size:8px}
+  .composer-footer{gap:12px!important}
+  .composer-footer .ras-voice-config{font-size:0!important}
+  .composer-footer .ras-voice-config::after{content:"Voz";font-size:11px}
+  .ras-listen-message{opacity:.72}
+}
+</style>
+
 </head>
 <body>
 <div id="root"></div>
@@ -111,5 +294,460 @@ try {
   document.getElementById("root").innerHTML='<main style="max-width:760px;margin:80px auto;padding:24px;color:#fff;font-family:system-ui"><h1>RASTHOR·IA</h1><p>No se pudo abrir la mesa. Recarga la página; si continúa, revisaremos este despliegue.</p></main>';
 }
 </script>
+
+<script id="rasthoria-voice-narrator-v1-script">
+(() => {
+  if (window.__rasthoriaVoiceNarratorV1) return;
+  window.__rasthoriaVoiceNarratorV1 = true;
+
+  const STORAGE_KEY = "rasthoria:narrator:v1";
+  const supported = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+  const synth = supported ? window.speechSynthesis : null;
+  const defaults = { auto:false, includeNpc:false, rate:0.94, voiceURI:"" };
+  let state = { ...defaults };
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    state = { ...defaults, ...saved };
+  } catch (_) {}
+
+  let voices = [];
+  let speechQueue = [];
+  let speaking = false;
+  let paused = false;
+  let activeMessage = null;
+  let currentScroll = null;
+  let mutationTimer = 0;
+  const seen = new Set();
+
+  const persist = () => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
+  };
+
+  const cleanText = (text) => String(text || "")
+    .replace(/\s+/g, " ")
+    .replace(/^[•·—–-]+\s*/g, "")
+    .trim();
+
+  const hash = (text) => {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  };
+
+  const messageText = (node) => {
+    const el = node && node.querySelector ? node.querySelector(".message-text") : null;
+    return cleanText(el ? el.innerText : "");
+  };
+
+  const messageKey = (node) => {
+    const kind = node && node.classList && node.classList.contains("message-npc") ? "npc:" : "narrator:";
+    return kind + hash(messageText(node));
+  };
+
+  const splitSpeech = (text, maxLen = 280) => {
+    const normalized = cleanText(text);
+    if (!normalized) return [];
+    const sentences = normalized.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) || [normalized];
+    const parts = [];
+    let current = "";
+    for (const raw of sentences) {
+      const sentence = raw.trim();
+      if (!sentence) continue;
+      if ((current + " " + sentence).trim().length <= maxLen) {
+        current = (current + " " + sentence).trim();
+      } else {
+        if (current) parts.push(current);
+        if (sentence.length <= maxLen) current = sentence;
+        else {
+          const words = sentence.split(/\s+/);
+          let chunk = "";
+          for (const word of words) {
+            if ((chunk + " " + word).trim().length > maxLen) {
+              if (chunk) parts.push(chunk);
+              chunk = word;
+            } else chunk = (chunk + " " + word).trim();
+          }
+          current = chunk;
+        }
+      }
+    }
+    if (current) parts.push(current);
+    return parts;
+  };
+
+  const spanishScore = (voice) => {
+    const lang = String(voice.lang || "").toLowerCase();
+    let score = 0;
+    if (lang === "es-cl") score += 100;
+    else if (lang.startsWith("es-cl")) score += 95;
+    else if (lang === "es-419") score += 88;
+    else if (lang.startsWith("es-mx")) score += 82;
+    else if (lang.startsWith("es-es")) score += 78;
+    else if (lang.startsWith("es")) score += 70;
+    if (voice.localService) score += 4;
+    const name = String(voice.name || "").toLowerCase();
+    if (/natural|neural|premium|online/.test(name)) score += 5;
+    return score;
+  };
+
+  const getVoice = () => {
+    if (!voices.length) return null;
+    if (state.voiceURI) {
+      const saved = voices.find(v => v.voiceURI === state.voiceURI);
+      if (saved) return saved;
+    }
+    return voices.slice().sort((a,b) => spanishScore(b) - spanishScore(a))[0] || voices[0];
+  };
+
+  const updateMessageButtons = () => {
+    document.querySelectorAll(".ras-listen-message").forEach(btn => {
+      const node = btn.closest(".message,.message-npc");
+      btn.classList.toggle("is-speaking", !!activeMessage && node === activeMessage && speaking);
+      btn.setAttribute("aria-label", activeMessage === node && speaking ? "Detener narración" : "Escuchar este mensaje");
+      btn.title = activeMessage === node && speaking ? "Detener narración" : "Escuchar";
+    });
+  };
+
+  const updateControls = () => {
+    document.querySelectorAll(".ras-voice-main").forEach(btn => {
+      btn.classList.toggle("is-on", !!state.auto);
+      btn.classList.toggle("is-speaking", !!speaking);
+      const status = btn.querySelector("b");
+      if (status) status.textContent = state.auto ? "ON" : "OFF";
+      btn.title = supported ? (state.auto ? "Desactivar narración automática" : "Activar narración automática") : "Narrador no disponible en este navegador";
+      btn.disabled = !supported;
+    });
+    const panel = document.querySelector(".ras-voice-popover");
+    if (panel) {
+      const auto = panel.querySelector("[data-ras-auto]");
+      const npc = panel.querySelector("[data-ras-npc]");
+      const rate = panel.querySelector("[data-ras-rate]");
+      const rateValue = panel.querySelector("[data-ras-rate-value]");
+      const pause = panel.querySelector("[data-ras-pause]");
+      const stop = panel.querySelector("[data-ras-stop]");
+      if (auto) auto.checked = !!state.auto;
+      if (npc) npc.checked = !!state.includeNpc;
+      if (rate) rate.value = String(state.rate);
+      if (rateValue) rateValue.textContent = Number(state.rate).toFixed(2) + "×";
+      if (pause) pause.textContent = paused ? "Reanudar" : "Pausar";
+      if (pause) pause.disabled = !speaking;
+      if (stop) stop.disabled = !speaking;
+    }
+    updateMessageButtons();
+  };
+
+  const stopSpeech = () => {
+    speechQueue = [];
+    speaking = false;
+    paused = false;
+    activeMessage = null;
+    if (synth) synth.cancel();
+    updateControls();
+  };
+
+  const speakNext = () => {
+    if (!supported || !speaking) return;
+    if (!speechQueue.length) {
+      speaking = false;
+      paused = false;
+      activeMessage = null;
+      updateControls();
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(speechQueue.shift());
+    const voice = getVoice();
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang || "es-CL";
+    } else utterance.lang = "es-CL";
+    utterance.rate = Math.max(0.7, Math.min(1.25, Number(state.rate) || 0.94));
+    utterance.pitch = 0.93;
+    utterance.volume = 1;
+    utterance.onend = () => {
+      if (speaking) speakNext();
+    };
+    utterance.onerror = () => {
+      if (speaking) speakNext();
+    };
+    synth.speak(utterance);
+    updateControls();
+  };
+
+  const speak = (text, node) => {
+    if (!supported) return;
+    const parts = splitSpeech(text);
+    if (!parts.length) return;
+    stopSpeech();
+    speechQueue = parts;
+    speaking = true;
+    paused = false;
+    activeMessage = node || null;
+    speakNext();
+  };
+
+  const togglePause = () => {
+    if (!supported || !speaking) return;
+    if (paused) {
+      synth.resume();
+      paused = false;
+    } else {
+      synth.pause();
+      paused = true;
+    }
+    updateControls();
+  };
+
+  const populateVoices = () => {
+    if (!supported) return;
+    voices = synth.getVoices() || [];
+    const select = document.querySelector("[data-ras-voice]");
+    if (!select) return;
+    const previous = state.voiceURI;
+    select.textContent = "";
+    const ordered = voices.slice().sort((a,b) => spanishScore(b) - spanishScore(a));
+    ordered.forEach(v => {
+      const option = document.createElement("option");
+      option.value = v.voiceURI;
+      option.textContent = v.name + " · " + (v.lang || "");
+      select.appendChild(option);
+    });
+    const chosen = ordered.find(v => v.voiceURI === previous) || getVoice();
+    if (chosen) {
+      select.value = chosen.voiceURI;
+      if (!state.voiceURI) {
+        state.voiceURI = chosen.voiceURI;
+        persist();
+      }
+    }
+  };
+
+  const decorateMessage = (node) => {
+    if (!node || !node.querySelector) return;
+    const text = messageText(node);
+    if (!text) return;
+    const label = node.querySelector(".message-label");
+    if (label && !label.querySelector(".ras-listen-message")) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ras-listen-message";
+      button.textContent = "🔊";
+      button.setAttribute("aria-label", "Escuchar este mensaje");
+      button.title = "Escuchar";
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (speaking && activeMessage === node) stopSpeech();
+        else speak(messageText(node), node);
+      });
+      label.appendChild(button);
+    }
+  };
+
+  const shouldAutoRead = (node) => {
+    if (!state.auto || !node) return false;
+    if (node.classList.contains("message-narrator")) return true;
+    if (state.includeNpc && node.classList.contains("message-npc")) return true;
+    return false;
+  };
+
+  const scanMessages = (initial = false) => {
+    const scroll = document.querySelector(".narrative-scroll");
+    if (!scroll) return;
+    const nodes = Array.from(scroll.querySelectorAll(".message-narrator,.message-npc"));
+    const fresh = [];
+    nodes.forEach(node => {
+      decorateMessage(node);
+      const key = messageKey(node);
+      if (!key.endsWith(":ztntfp") && !seen.has(key)) {
+        seen.add(key);
+        if (!initial && shouldAutoRead(node)) fresh.push(node);
+      }
+    });
+    if (fresh.length) {
+      const node = fresh[fresh.length - 1];
+      speak(messageText(node), node);
+    }
+  };
+
+  const createPanel = () => {
+    let panel = document.querySelector(".ras-voice-popover");
+    if (panel) return panel;
+    panel = document.createElement("div");
+    panel.className = "ras-voice-popover";
+    panel.hidden = true;
+    panel.innerHTML =
+      '<h3>Narrador de voz</h3>' +
+      '<div class="ras-voice-sub">Da voz al Director sin cambiar la historia, los dados ni tus partidas guardadas.</div>' +
+      (supported ? '' : '<div class="ras-voice-unsupported">Este navegador no expone un motor de voz compatible.</div>') +
+      '<div class="ras-voice-toggleline"><span>Narración automática</span><label class="ras-switch"><input type="checkbox" data-ras-auto><i></i></label></div>' +
+      '<div class="ras-voice-toggleline"><span>Leer también a los NPC</span><label class="ras-switch"><input type="checkbox" data-ras-npc><i></i></label></div>' +
+      '<div class="ras-voice-row"><label>Voz</label><select data-ras-voice aria-label="Voz del narrador"></select></div>' +
+      '<div class="ras-voice-row"><label>Velocidad</label><input data-ras-rate type="range" min="0.75" max="1.15" step="0.01"><span data-ras-rate-value style="font-size:10px;color:#bda77f;min-width:34px;text-align:right"></span></div>' +
+      '<div class="ras-voice-actions"><button type="button" data-ras-pause>Pausar</button><button type="button" data-ras-stop>Detener</button></div>';
+    document.body.appendChild(panel);
+
+    const auto = panel.querySelector("[data-ras-auto]");
+    const npc = panel.querySelector("[data-ras-npc]");
+    const voice = panel.querySelector("[data-ras-voice]");
+    const rate = panel.querySelector("[data-ras-rate]");
+    const pause = panel.querySelector("[data-ras-pause]");
+    const stop = panel.querySelector("[data-ras-stop]");
+
+    auto.addEventListener("change", () => {
+      state.auto = auto.checked;
+      persist();
+      updateControls();
+    });
+    npc.addEventListener("change", () => {
+      state.includeNpc = npc.checked;
+      persist();
+      updateControls();
+    });
+    voice.addEventListener("change", () => {
+      state.voiceURI = voice.value;
+      persist();
+    });
+    rate.addEventListener("input", () => {
+      state.rate = Number(rate.value);
+      persist();
+      updateControls();
+    });
+    pause.addEventListener("click", togglePause);
+    stop.addEventListener("click", stopSpeech);
+    populateVoices();
+    updateControls();
+    return panel;
+  };
+
+  const positionPanel = (button, panel) => {
+    panel.hidden = false;
+    panel.style.visibility = "hidden";
+    panel.style.left = "12px";
+    panel.style.top = "12px";
+    requestAnimationFrame(() => {
+      const rect = button.getBoundingClientRect();
+      const width = panel.offsetWidth;
+      const height = panel.offsetHeight;
+      const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.left));
+      let top = rect.top - height - 10;
+      if (top < 12) top = Math.min(window.innerHeight - height - 12, rect.bottom + 10);
+      panel.style.left = left + "px";
+      panel.style.top = Math.max(12, top) + "px";
+      panel.style.visibility = "visible";
+    });
+  };
+
+  const togglePanel = (button) => {
+    const panel = createPanel();
+    if (!panel.hidden) {
+      panel.hidden = true;
+      return;
+    }
+    positionPanel(button, panel);
+  };
+
+  const ensureUi = () => {
+    const intro = document.querySelector(".intro-title");
+    if (intro && !intro.querySelector(".ras-credit-home")) {
+      const credit = document.createElement("div");
+      credit.className = "ras-credit-home";
+      credit.innerHTML = 'by <strong>Ragamoofi</strong>';
+      intro.appendChild(credit);
+    }
+
+    const footer = document.querySelector(".composer-footer");
+    const composer = footer ? footer.closest(".composer") : null;
+    if (composer && !composer.querySelector(".ras-credit-chat")) {
+      const credit = document.createElement("div");
+      credit.className = "ras-credit-chat";
+      credit.innerHTML = 'by <strong>Ragamoofi</strong>';
+      composer.appendChild(credit);
+    }
+
+    if (footer && !footer.querySelector(".ras-voice-main")) {
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "ras-voice-main";
+      main.innerHTML = '<span aria-hidden="true">🔊</span><span>Narrador</span><b>OFF</b>';
+      main.addEventListener("click", () => {
+        if (!supported) return;
+        state.auto = !state.auto;
+        persist();
+        updateControls();
+      });
+
+      const config = document.createElement("button");
+      config.type = "button";
+      config.className = "ras-voice-config";
+      config.innerHTML = '<span aria-hidden="true">⚙</span><span>Voz</span>';
+      config.title = "Configurar narrador";
+      config.addEventListener("click", () => togglePanel(config));
+
+      const firstSpan = Array.from(footer.children).find(el => el.tagName === "SPAN");
+      footer.insertBefore(main, firstSpan || null);
+      footer.insertBefore(config, firstSpan || null);
+      updateControls();
+    }
+
+    const scroll = document.querySelector(".narrative-scroll");
+    if (scroll !== currentScroll) {
+      currentScroll = scroll;
+      seen.clear();
+      if (scroll) {
+        const nodes = Array.from(scroll.querySelectorAll(".message-narrator,.message-npc"));
+        scanMessages(true);
+        const hasPlayer = !!scroll.querySelector(".message-player");
+        if (state.auto && nodes.length > 0 && nodes.length <= 2 && !hasPlayer) {
+          const node = nodes.filter(shouldAutoRead).pop();
+          if (node) speak(messageText(node), node);
+        }
+      }
+    } else scanMessages(false);
+  };
+
+  document.addEventListener("click", (event) => {
+    const panel = document.querySelector(".ras-voice-popover");
+    if (!panel || panel.hidden) return;
+    if (panel.contains(event.target) || event.target.closest(".ras-voice-config")) return;
+    panel.hidden = true;
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      const panel = document.querySelector(".ras-voice-popover");
+      if (panel && !panel.hidden) {
+        panel.hidden = true;
+        event.stopPropagation();
+      }
+    }
+  }, true);
+
+  window.addEventListener("resize", () => {
+    const panel = document.querySelector(".ras-voice-popover");
+    if (panel && !panel.hidden) panel.hidden = true;
+  });
+
+  if (supported) {
+    voices = synth.getVoices() || [];
+    if (typeof synth.addEventListener === "function") synth.addEventListener("voiceschanged", populateVoices);
+    else synth.onvoiceschanged = populateVoices;
+  }
+
+  const observer = new MutationObserver(() => {
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(ensureUi, 100);
+  });
+  observer.observe(document.documentElement, { childList:true, subtree:true, characterData:true });
+
+  ensureUi();
+  setTimeout(ensureUi, 300);
+  setTimeout(ensureUi, 1200);
+})();
+</script>
+
 </body>
 </html>
