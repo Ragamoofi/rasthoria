@@ -757,12 +757,36 @@ function actionLikelyNeedsD20(campaign) {
   return social || hidden || stealth || physical || technical || uncertainty;
 }
 
+function combatPlayerActionLikelyNeedsD20(campaign) {
+  if (!campaign?.combat || campaign?.pending) return false;
+  const currentId=campaign.combat?.order?.[campaign.combat?.index]?.id;
+  if (currentId!=="player") return false;
+  const action=plainText(declaredAction(campaign)).trim();
+  if (!action) return false;
+  // Ataques normales deben resolverlos el motor de combate del cliente, no un ability check.
+  if (/\b(dispar|ataco|golpeo|pego|apunal|acuchill|degoll|decapit|mato|matar|hiero|herir|embisto|estrangul|corto con|clavo)\b/.test(action)) return false;
+  const social=/\b(convenz|convenc|persuad|mient|mentir|engan|intimid|amenaz|negoci|manipul|distraig|distraer|provoc|asust|hacer que se rinda|se rinda)\b/.test(action);
+  const stealth=/\b(escond|sigilo|me ocult|paso desapercib|sin que me vean|sin ser visto|escabull)\b/.test(action);
+  const physical=/\b(empujo|derrib|romp|trep|escal|salto|saltar|equilibr|maniobr|levanto .*pesad|tiro .*encima|arrojo .*encima|bloqueo .*puerta|forz)\b/.test(action);
+  const technical=/\b(hack|desactiv|desarmo|reparo|improvis|manipulo|sabote|program|cierro .*mecan|abro .*mecan)\b/.test(action);
+  const uncertainty=/\b(intento|trato de|pruebo a|a ver si|sin que|antes de que|bajo presion|contra reloj|arriesgo)\b/.test(action);
+  return social || stealth || physical || technical || uncertainty;
+}
+
 function semanticProblem(response,campaign) {
   if (!response) return "";
   if (campaign?.combat) {
     const currentId=campaign.combat?.order?.[campaign.combat?.index]?.id;
     if (currentId && currentId!=="player" && response.combatIntent?.action==="attack" && narrativeClaimsCombatHit(response.narrative)) {
       return "La narración dio por impactado o herido el objetivo de un ataque enemigo antes de que el motor tirara ataque/daño. Narra solo la intención y detente antes del impacto.";
+    }
+    if (currentId==="player") {
+      if (response.check && narrativeClaimsCheckOutcome(response.narrative)) {
+        return "La narración resolvió una maniobra del jugador en combate antes de lanzar el d20. Debe detenerse antes del resultado.";
+      }
+      if (combatPlayerActionLikelyNeedsD20(campaign) && !response.check) {
+        return "La maniobra creativa declarada por el jugador durante combate tiene incertidumbre u oposición. Debe resolverse con una prueba d20 antes de narrar éxito o fracaso.";
+      }
     }
     return "";
   }
@@ -1055,7 +1079,7 @@ Devuelve solo el JSON solicitado.`;
     const compact = publicCampaign(campaign);
     const isOpening = Number(compact.revision||0) <= 1 && (compact.messages?.length||0) <= 3;
     const hostileTurn = isHostileDeclaration(campaign);
-    const d20Turn = actionLikelyNeedsD20(campaign);
+    const d20Turn = actionLikelyNeedsD20(campaign) || combatPlayerActionLikelyNeedsD20(campaign);
     const genericItems = genericInventoryItems(campaign);
     const sceneDirective = isOpening
       ? "ESTE ES EL INICIO DE LA CAMPAÑA. Construye una apertura evocadora y cinematográfica siguiendo estrictamente APERTURA DE CAMPAÑA. Prioriza atmósfera, lugar, humanidad y un gancho que ocurra en escena."
