@@ -1,5 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-22-rules-v9-dice-lock";
+const BUILD = "2026-09-22-rules-v10-tabletop-combat";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -404,8 +404,15 @@ TIRADAS — REGLA CENTRAL D20 / RASTHOR·IA
 - Un fracaso no tiene por qué bloquear la aventura. Favorece fallo con consecuencia cuando sea apropiado: pérdida de tiempo, ruido, sospecha, posición peor, recurso gastado, información incompleta, oportunidad perdida o peligro nuevo.
 - REGLA DE BLOQUEO: jamás continúes la ficción más allá de una acción declarada si esa acción debía generar tirada y todavía no existe resultado del motor.
 
-COMBATE
+COMBATE — FLUJO DE MESA POR TEXTO
+- El combate se juega principalmente escribiendo en lenguaje natural, como en una mesa de rol. El jugador describe lo que intenta hacer; NO necesita elegir una acción desde un menú táctico.
 - Solo crea encounter cuando la situación realmente inicia combate. Debe incluir al menos un enemy.
+- Al comenzar un enfrentamiento, el motor resuelve iniciativa: 1D20 + Destreza. El total más alto actúa primero.
+- Un ataque normal se resuelve en DOS pasos mecánicos: primero 1D20 + modificador de ataque contra la CA del objetivo; si impacta, después se tira el dado de daño del arma + su modificador. El Director nunca debe inventar esos números.
+- En un ataque, un 20 natural es crítico y duplica los dados de daño; un 1 natural falla. El resto compara TOTAL (d20 + modificador) contra la CA.
+- Maniobras creativas escritas durante combate (engañar, empujar, ocultarse, desarmar, intimidar, buscar cobertura, etc.) pueden usar una prueba d20 apropiada. Explica la intención en reason con lenguaje concreto.
+- El jugador puede escribir cosas como "le disparo a J", "me escondo tras la barra", "intento desarmarlo", "corro hacia la puerta" o "termino mi turno". Interpreta la intención; los dados y el motor determinan el resultado.
+- Tras una tirada, narra sus consecuencias sin duplicar daño, HP, iniciativa ni efectos ya aplicados por el motor.
 - REGLA CRÍTICA: si el jugador declara que intenta apuñalar, cortar, disparar, golpear, decapitar, matar o herir deliberadamente a un NPC consciente/capaz de reaccionar y todavía no existe combate, NO puedes decidir que el golpe impacta ni que el NPC muere. Debes narrar únicamente el inicio del intento y crear encounter para que el motor resuelva iniciativa y ataques con dados.
 - Frases del jugador como "le corto la cabeza", "lo mato", "le disparo entre los ojos" o similares son INTENCIONES, no resultados garantizados.
 - Nunca conviertas una descripción contundente escrita por el jugador en éxito automático. El jugador declara lo que intenta; los dados deciden si lo consigue.
@@ -779,6 +786,23 @@ function combatPlayerActionLikelyNeedsD20(campaign) {
   return true;
 }
 
+function fallbackCheckForDeclaredAction(campaign) {
+  const action=plainText(declaredAction(campaign)).trim();
+  let ability="WIS", skill="perception", dc=10, reason="Resolver la acción declarada";
+  if (/\b(convenc|persuad|negoci|dialog|hablo|digo|pregunto|seduc)\b/.test(action)) { ability="CHA"; skill="persuasion"; dc=10; reason="Influir en la reacción del interlocutor"; }
+  else if (/\b(intimid|amenaz|asust)\b/.test(action)) { ability="CHA"; skill="intimidation"; dc=10; reason="Imponer presión o intimidar"; }
+  else if (/\b(mient|engañ|engaño|finjo|disfraz)\b/.test(action)) { ability="CHA"; skill="deception"; dc=12; reason="Engañar sin ser descubierto"; }
+  else if (/\b(busco|investig|registro|examino|inspeccion|pista|municion|munición)\b/.test(action)) { ability="INT"; skill="investigation"; dc=10; reason="Buscar y obtener información o recursos"; }
+  else if (/\b(observo|miro|escucho|vigilo|detecto|percib)\b/.test(action)) { ability="WIS"; skill="perception"; dc=10; reason="Percibir detalles relevantes de la escena"; }
+  else if (/\b(sigilo|escond|infiltr|sin que me vean|paso desapercib)\b/.test(action)) { ability="DEX"; skill="stealth"; dc=12; reason="Actuar sin ser detectado"; }
+  else if (/\b(ganzua|ganzúa|cerradura|robo|carter|manos)\b/.test(action)) { ability="DEX"; skill="sleight"; dc=12; reason="Manipular algo con precisión"; }
+  else if (/\b(empuj|trep|escal|salto|romp|forz|levanto|corro|agarro)\b/.test(action)) { ability="STR"; skill="athletics"; dc=10; reason="Superar el esfuerzo físico de la acción"; }
+  else if (/\b(esquiv|equilibr|acrob)\b/.test(action)) { ability="DEX"; skill="acrobatics"; dc=10; reason="Resolver la maniobra con agilidad"; }
+  const difficult=/\b(muy dificil|muy difícil|extremo|casi imposible|bajo fuego|contra reloj)\b/.test(action);
+  if(difficult) dc=Math.max(dc,15);
+  return {kind:"check",ability,skill,dc,advantage:"normal",reason,success:[],failure:[],damage:null};
+}
+
 function semanticProblem(response,campaign) {
   if (!response) return "";
   if (campaign?.combat) {
@@ -1137,7 +1161,19 @@ Devuelve solo el JSON solicitado.`;
         });
         response = normalizeResponse(parsed,campaign);
         const secondIssue=semanticProblem(response,campaign);
-        if(secondIssue) throw new Error("SEMANTIC_RULE_FAILURE: "+secondIssue);
+        if(secondIssue) {
+          const needsFallback=actionLikelyNeedsD20(campaign)||combatPlayerActionLikelyNeedsD20(campaign);
+          if(needsFallback) {
+            console.warn("RASTHOR·IA fallback d20:",secondIssue);
+            response.narrative=[{kind:"narrator",speaker:"",text:"Tu intención queda planteada. Antes de conocer el resultado, la situación depende de la tirada."}];
+            response.check=fallbackCheckForDeclaredAction(campaign);
+            response.effects=(response.effects||[]).filter(e=>e.type==="item_rename");
+            response.encounter=null;
+            response.combatIntent=null;
+          } else {
+            throw new Error("SEMANTIC_RULE_FAILURE: "+secondIssue);
+          }
+        }
       }
       return json({response,vault:response.privateMemory},200,origin);
     } catch (error) {
