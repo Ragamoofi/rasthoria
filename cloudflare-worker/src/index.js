@@ -1,5 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-22-rules-v10-tabletop-combat";
+const BUILD = "2026-09-22-rules-v11-director-resilience";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -892,6 +892,52 @@ function normalizeResponse(raw, campaign) {
   return out;
 }
 
+function emergencyDirectorResponse(campaign) {
+  const combat=campaign?.combat||null;
+  const currentId=combat?.order?.[combat?.index]?.id||null;
+  let narrative=[{kind:"narrator",speaker:"",text:"El Director tarda un instante en responder, pero el estado de la partida permanece intacto."}];
+  let check=null, combatIntent=null;
+
+  if (combat && currentId==="player") {
+    narrative=[{kind:"narrator",speaker:"",text:"Es tu turno. La situación sigue exactamente donde quedó; describe lo que intentas hacer y los dados resolverán la acción."}];
+    if (combatPlayerActionLikelyNeedsD20(campaign)) check=fallbackCheckForDeclaredAction(campaign);
+  } else if (combat && currentId) {
+    const actor=(combat.actors||[]).find(a=>a.id===currentId);
+    if (actor?.side==="enemy") {
+      combatIntent={actor:currentId,action:"attack",target:"player"};
+      narrative=[{kind:"narrator",speaker:"",text:`${actor.name||"El adversario"} reacciona y se prepara para atacar. El motor resolverá el intento con los dados correspondientes.`}];
+    } else if (actor?.side==="ally") {
+      const target=(combat.actors||[]).find(a=>a.side==="enemy"&&a.hp>0&&!(combat.fled||[]).includes(a.id));
+      if (target) {
+        combatIntent={actor:currentId,action:"attack",target:target.id};
+        narrative=[{kind:"narrator",speaker:"",text:`${actor.name||"Tu aliado"} toma la iniciativa contra ${target.name}. El motor resolverá el ataque.`}];
+      } else combatIntent={actor:currentId,action:"dodge",target:null};
+    }
+  } else if (actionLikelyNeedsD20(campaign)) {
+    check=fallbackCheckForDeclaredAction(campaign);
+    narrative=[{kind:"narrator",speaker:"",text:"Tu intención queda planteada. Antes de conocer el resultado, la situación depende de una tirada."}];
+  }
+
+  return normalizeResponse({
+    title:null,
+    narrative,
+    check,
+    effects:[],
+    encounter:null,
+    combatIntent,
+    memory:{
+      summary:campaign?.memory?.summary||"",
+      entities:Array.isArray(campaign?.memory?.entities)?campaign.memory.entities:[],
+      decision:null,
+      flags:[],
+      elapsedMinutes:0,
+      location:null,
+    },
+    safeRest:false,
+    privateMemory:campaign?.gmVault||"",
+  },campaign);
+}
+
 function parseJSONLoose(value) {
   if (value && typeof value === "object") return value;
   if (typeof value !== "string") return null;
@@ -1178,7 +1224,14 @@ Devuelve solo el JSON solicitado.`;
       return json({response,vault:response.privateMemory},200,origin);
     } catch (error) {
       console.error("RASTHOR·IA Workers AI error",error);
-      return json({error:"El Director IA no pudo completar este turno. Tu acción sigue guardada: pulsa Continuar narración para reintentar."},503,origin);
+      try {
+        const fallback=emergencyDirectorResponse(campaign);
+        console.warn("RASTHOR·IA emergency Director fallback active");
+        return json({response:fallback,vault:fallback.privateMemory,degraded:true},200,origin);
+      } catch (fallbackError) {
+        console.error("RASTHOR·IA emergency fallback error",fallbackError);
+        return json({error:"El Director IA no pudo completar este turno. Tu acción sigue guardada para reintentar."},503,origin);
+      }
     }
   }
 };
