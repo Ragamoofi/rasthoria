@@ -1,0 +1,41 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "rasthoria",
+  "version": "1.0.0",
+  "description": "RPG narrativo donde ChatGPT es el Narrador y RASTHOR·IA aporta dados, ficha y estado.",
+  "author": {
+    "name": "Ragamoofi",
+    "url": "https://github.com/Ragamoofi/rasthoria"
+  },
+  "homepage": "https://ragamoofi.github.io/rasthoria/",
+  "repository": "https://github.com/Ragamoofi/rasthoria",
+  "keywords": [
+    "rpg",
+    "roleplaying",
+    "dice",
+    "narrative",
+    "game"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "RASTHOR·IA",
+        "shortDescription": "RPG narrativo con ChatGPT",
+        "longDescription": "Juega campañas de rol abiertas en las que ChatGPT actúa como Narrador y RASTHOR·IA se encarga de la ficha, los dados, los puntos de golpe, el inventario y el estado mecánico.",
+        "developerName": "Ragamoofi",
+        "capabilities": [
+          "Read"
+        ],
+        "websiteURL": "https://ragamoofi.github.io/rasthoria/",
+        "privacyPolicyURL": "https://ragamoofi.github.io/rasthoria/privacy.html",
+        "termsOfServiceURL": "https://ragamoofi.github.io/rasthoria/terms.html",
+        "defaultPrompt": [
+          "Inicia RASTHOR·IA y crea conmigo una campaña de superhéroes.",
+          "Quiero jugar una historia noir moderna en RASTHOR·IA.",
+          "Inventa una aventura completamente aleatoria en RASTHOR·IA."
+        ],
+        "brandColor": "#B98A50"
+      }
+    }
+  }
+}

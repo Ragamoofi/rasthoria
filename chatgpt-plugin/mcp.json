@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "rasthoria": {
+      "type": "streamable-http",
+      "url": "https://rasthoria-cloud-dm.o-sariego.workers.dev/mcp"
+    }
+  }
+}
