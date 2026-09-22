@@ -1,5 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-21-rules-v5-inventory-equipment";
+const BUILD = "2026-09-21-rules-v6-continuity";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -614,8 +614,19 @@ function canonicalQuestStatus(status) {
 }
 
 function sanitizeEntities(entities,campaign) {
-  const existing=new Map((campaign?.memory?.entities||[]).map(e=>[e.id,e]));
-  return (Array.isArray(entities)?entities:[]).filter(e=>{
+  const current=Array.isArray(campaign?.memory?.entities)?campaign.memory.entities:[];
+  const existing=new Map(current.map(e=>[e.id,e]));
+  const questByName=new Map(current.filter(e=>e?.kind==="quest").map(e=>[plainText(e.name),e]));
+  const normalized=(Array.isArray(entities)?entities:[]).map(raw=>{
+    if(!raw||typeof raw!=="object") return raw;
+    const e={...raw};
+    if(e.kind==="quest") {
+      const same=questByName.get(plainText(e.name));
+      if(same && !existing.has(String(e.id||"").trim())) e.id=same.id;
+    }
+    return e;
+  });
+  return normalized.filter(e=>{
     if(!e||typeof e!=="object") return false;
     const id=String(e.id||"").trim();
     const name=String(e.name||"").trim();
