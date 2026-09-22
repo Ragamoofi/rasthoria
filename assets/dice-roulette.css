@@ -1,0 +1,175 @@
+
+/* RASTHOR·IA — Dados estilo ruleta interna */
+.die-shape.ras-roulette-ready{
+  --ras-gold:#e3c48f;
+  --ras-gold-soft:#b68f53;
+  --ras-ink:#120f14;
+  --ras-panel:#1b161c;
+  --ras-panel-2:#241d22;
+  --ras-cream:#f2e4bf;
+  position:relative!important;
+  overflow:visible!important;
+  isolation:isolate;
+  display:grid!important;
+  place-items:center;
+  filter:drop-shadow(0 10px 16px rgba(0,0,0,.45));
+  transform:none!important;
+  animation:none!important;
+}
+.die-shape.ras-roulette-ready.is-rolling{animation:none!important;transform:none!important}
+.die-shape.ras-roulette-ready > .die-icon,
+.die-shape.ras-roulette-ready > span,
+.die-shape.ras-roulette-ready > small{opacity:0!important;pointer-events:none!important}
+.die-shape.ras-roulette-ready::before,
+.die-shape.ras-roulette-ready::after{display:none!important}
+.die-shape.ras-roulette-ready .ras-dice-frame,
+.die-shape.ras-roulette-ready .ras-dice-face,
+.die-shape.ras-roulette-ready .ras-dice-inner,
+.die-shape.ras-roulette-ready .ras-dice-ornament,
+.die-shape.ras-roulette-ready .ras-dice-window,
+.die-shape.ras-roulette-ready .ras-dice-flare,
+.die-shape.ras-roulette-ready .ras-dice-caption,
+.die-shape.ras-roulette-ready .ras-dice-track,
+.die-shape.ras-roulette-ready .ras-dice-cell{position:absolute;inset:0}
+
+.die-shape.ras-roulette-ready .ras-dice-frame{
+  inset:9%;
+  border:1px solid rgba(223,185,120,.9);
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255,229,164,.16), transparent 30%),
+    radial-gradient(circle at 50% 72%, rgba(255,209,123,.08), transparent 38%),
+    linear-gradient(150deg,#3c2e23 0%,#19151b 55%,#110e13 100%);
+  box-shadow:inset 0 1px rgba(255,255,255,.12), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 24px rgba(214,165,85,.12);
+}
+.die-shape.ras-roulette-ready .ras-dice-face{
+  inset:17%;
+  border:1px solid rgba(227,191,126,.34);
+  background:linear-gradient(180deg, rgba(255,237,188,.06), rgba(255,255,255,0) 22%), linear-gradient(180deg, #272027 0%, #19161b 100%);
+  box-shadow: inset 0 1px rgba(255,255,255,.06), inset 0 -12px 16px rgba(0,0,0,.34);
+}
+.die-shape.ras-roulette-ready .ras-dice-inner{
+  inset:27%;
+  border-radius:16px;
+  border:1px solid rgba(233,201,140,.14);
+  background:linear-gradient(180deg,#131015,#0b090d);
+  box-shadow:inset 0 0 22px rgba(0,0,0,.44);
+}
+.die-shape.ras-roulette-ready .ras-dice-ornament{
+  inset:8%;
+  background:
+    linear-gradient(90deg, transparent 0 7%, rgba(223,187,118,.15) 8%, transparent 9% 91%, rgba(223,187,118,.15) 92%, transparent 93%),
+    linear-gradient(0deg, transparent 0 7%, rgba(223,187,118,.14) 8%, transparent 9% 91%, rgba(223,187,118,.14) 92%, transparent 93%);
+  opacity:.85;
+  pointer-events:none;
+}
+.die-shape.ras-roulette-ready .ras-dice-flare{
+  inset:auto 20% 14% 20%;
+  height:16%;
+  border-radius:50%;
+  background:radial-gradient(circle at center, rgba(243,205,132,.26), rgba(243,205,132,0) 72%);
+  filter:blur(8px);
+  opacity:.75;
+}
+.die-shape.ras-roulette-ready .ras-dice-window{
+  inset:31% 23%;
+  overflow:hidden;
+  border-radius:12px;
+  border:1px solid rgba(228,193,128,.3);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0) 35%),
+    linear-gradient(180deg,#0a090c 0%, #161218 100%);
+  box-shadow:inset 0 0 16px rgba(0,0,0,.48),0 0 0 1px rgba(255,230,176,.03);
+}
+.die-shape.ras-roulette-ready .ras-dice-window::before,
+.die-shape.ras-roulette-ready .ras-dice-window::after{
+  content:"";
+  position:absolute;
+  left:0;right:0;
+  height:24%;
+  z-index:2;
+  pointer-events:none;
+}
+.die-shape.ras-roulette-ready .ras-dice-window::before{top:0;background:linear-gradient(180deg,#141116,rgba(20,17,22,0));}
+.die-shape.ras-roulette-ready .ras-dice-window::after{bottom:0;background:linear-gradient(0deg,#141116,rgba(20,17,22,0));}
+.die-shape.ras-roulette-ready .ras-dice-track{display:flex;flex-direction:column;transition:transform 110ms cubic-bezier(.2,.75,.2,1);transform:translateY(0);height:200%}
+.die-shape.ras-roulette-ready .ras-dice-cell{
+  position:relative;
+  height:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:40px;
+  font-weight:700;
+  color:var(--ras-cream);
+  line-height:1;
+  letter-spacing:.02em;
+  text-shadow:0 2px 6px rgba(0,0,0,.85),0 0 14px rgba(240,196,113,.16);
+  font-variant-numeric:tabular-nums;
+}
+.die-shape.ras-roulette-ready .ras-dice-cell.is-next{opacity:.82}
+.die-shape.ras-roulette-ready .ras-dice-track.is-animating{transform:translateY(-50%)}
+.die-shape.ras-roulette-ready .ras-dice-caption{
+  inset:auto 0 13%;
+  height:auto;
+  text-align:center;
+  font:700 9px/1 system-ui,sans-serif;
+  letter-spacing:1.6px;
+  color:#bfa67a;
+  opacity:.9;
+  text-shadow:0 1px 3px rgba(0,0,0,.8);
+}
+.die-shape.ras-roulette-ready.ras-rolling .ras-dice-window{box-shadow:inset 0 0 18px rgba(0,0,0,.48), 0 0 0 1px rgba(255,218,163,.04),0 0 26px rgba(212,157,74,.13)}
+.die-shape.ras-roulette-ready.ras-rolling .ras-dice-frame{box-shadow:inset 0 1px rgba(255,255,255,.12), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 26px rgba(214,165,85,.18)}
+.die-shape.ras-roulette-ready.ras-result-max .ras-dice-frame,
+.die-shape.ras-roulette-ready.ras-result-highlight .ras-dice-frame{box-shadow:inset 0 1px rgba(255,255,255,.12), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 30px rgba(255,209,96,.26)}
+.die-shape.ras-roulette-ready.ras-result-max .ras-dice-window,
+.die-shape.ras-roulette-ready.ras-result-highlight .ras-dice-window{border-color:rgba(239,200,112,.58)}
+.die-shape.ras-roulette-ready.ras-result-min .ras-dice-frame{box-shadow:inset 0 1px rgba(255,255,255,.08), inset 0 -18px 24px rgba(0,0,0,.42), 0 0 22px rgba(184,84,84,.18)}
+.die-shape.ras-roulette-ready.ras-result-min .ras-dice-window{border-color:rgba(181,100,100,.45)}
+
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-frame{clip-path:polygon(50% 3%, 96% 91%, 4% 91%)}
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-face{clip-path:polygon(50% 12%, 84% 80%, 16% 80%);inset:16% 17% 18%}
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-window{inset:38% 27% 27%}
+.die-shape.ras-roulette-ready.die-d4 .ras-dice-caption{bottom:12%}
+
+.die-shape.ras-roulette-ready.die-d6 .ras-dice-frame{clip-path:polygon(13% 13%,87% 13%,87% 87%,13% 87%);border-radius:14px}
+.die-shape.ras-roulette-ready.die-d6 .ras-dice-face{clip-path:polygon(14% 14%,86% 14%,86% 86%,14% 86%);border-radius:10px;inset:18%}
+.die-shape.ras-roulette-ready.die-d6 .ras-dice-window{inset:31% 24%}
+
+.die-shape.ras-roulette-ready.die-d8 .ras-dice-frame{clip-path:polygon(50% 1%,95% 50%,50% 99%,5% 50%)}
+.die-shape.ras-roulette-ready.die-d8 .ras-dice-face{clip-path:polygon(50% 10%,85% 50%,50% 90%,15% 50%);inset:18%}
+
+.die-shape.ras-roulette-ready.die-d10 .ras-dice-frame{clip-path:polygon(50% 0,91% 33%,75% 100%,25% 100%,9% 33%)}
+.die-shape.ras-roulette-ready.die-d10 .ras-dice-face{clip-path:polygon(50% 9%,83% 35%,70% 88%,30% 88%,17% 35%);inset:16% 18% 17%}
+.die-shape.ras-roulette-ready.die-d10 .ras-dice-window{inset:34% 25% 28%}
+
+.die-shape.ras-roulette-ready.die-d12 .ras-dice-frame{clip-path:polygon(50% 0,79% 9%,97% 34%,97% 66%,79% 91%,50% 100%,21% 91%,3% 66%,3% 34%,21% 9%)}
+.die-shape.ras-roulette-ready.die-d12 .ras-dice-face{clip-path:polygon(50% 10%,75% 17%,90% 38%,90% 62%,75% 83%,50% 90%,25% 83%,10% 62%,10% 38%,25% 17%);inset:14%}
+
+.die-shape.ras-roulette-ready.die-d20 .ras-dice-frame,
+.die-shape.ras-roulette-ready.die-d100 .ras-dice-frame{clip-path:polygon(50% 0,91% 21%,100% 64%,72% 100%,28% 100%,0 64%,9% 21%)}
+.die-shape.ras-roulette-ready.die-d20 .ras-dice-face,
+.die-shape.ras-roulette-ready.die-d100 .ras-dice-face{clip-path:polygon(50% 8%,84% 25%,92% 60%,70% 92%,30% 92%,8% 60%,16% 25%);inset:15%}
+
+.pending-main .die-shape.ras-roulette-ready{width:72px!important;height:72px!important}
+.pending-main .die-shape.ras-roulette-ready .ras-dice-cell{font-size:26px}
+.pending-main .die-shape.ras-roulette-ready .ras-dice-caption{font-size:7px;bottom:10%}
+.pending-main .die-shape.ras-roulette-ready .ras-dice-window{border-radius:9px}
+.rolling-overlay .die-shape.ras-roulette-ready{width:158px;height:158px;filter:drop-shadow(0 18px 28px rgba(0,0,0,.52))}
+.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-cell{font-size:56px}
+.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-caption{font-size:10px;bottom:13.5%}
+.rolling-overlay .die-shape.ras-roulette-ready .ras-dice-window{border-radius:15px}
+.die-shape.ras-roulette-ready.small{width:72px;height:72px}
+.die-shape.ras-roulette-ready.small .ras-dice-cell{font-size:25px}
+.die-shape.ras-roulette-ready.small .ras-dice-caption{font-size:7px;bottom:11%}
+
+@media (max-width:760px){
+  .die-shape.ras-roulette-ready{width:102px;height:102px}
+  .die-shape.ras-roulette-ready .ras-dice-cell{font-size:34px}
+  .rolling-overlay .die-shape.ras-roulette-ready{width:128px;height:128px}
+  .rolling-overlay .die-shape.ras-roulette-ready .ras-dice-cell{font-size:46px}
+}
+@media (prefers-reduced-motion:reduce){
+  .die-shape.ras-roulette-ready .ras-dice-track{transition:none!important}
+}

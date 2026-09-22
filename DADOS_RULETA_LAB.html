@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RASTHOR·IA — Laboratorio de dados ruleta</title>
+<link rel="stylesheet" href="./assets/dice-roulette.css?v=1">
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:radial-gradient(circle at top,#2b232a,#151218 58%,#0d0b10);color:#eadfcb;min-height:100vh}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 18px 56px}
+  h1{font:34px Georgia,serif;margin:0 0 6px;color:#f0d6a4}
+  p{color:#bcaea3;line-height:1.7}
+  .panel{background:#17141a;border:1px solid #43352c;border-radius:16px;padding:20px;box-shadow:0 18px 40px rgba(0,0,0,.28)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 22px}
+  button{background:linear-gradient(180deg,#3b2d23,#251d17);color:#f2dfbf;border:1px solid #9d7a4a;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+  button:hover{transform:translateY(-1px)}
+  .arena{border:1px solid #4e4037;border-radius:16px;background:radial-gradient(circle at 50% 28%,rgba(255,212,133,.08),transparent 30%),linear-gradient(180deg,#19151c,#100d13);padding:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:18px;min-height:280px}
+  .mock-die{display:grid;place-items:center;gap:10px;justify-items:center}
+  .mock-die .die-shape{width:132px;height:132px}
+  .meta{font-size:12px;color:#b49a75;letter-spacing:1.2px}
+  .result{font:22px Georgia,serif;color:#f0d4a2;margin-top:18px}
+  @media (max-width:700px){.mock-die .die-shape{width:104px;height:104px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Laboratorio de dados ruleta</h1>
+  <p>Prueba visual rápida del nuevo concepto: dado fijo + ruleta interna de números. Cada tirada usa una animación corta y desacelera hasta el resultado final.</p>
+  <div class="panel">
+    <div class="controls">
+      <button data-roll="4">Tirar D4</button>
+      <button data-roll="6">Tirar D6</button>
+      <button data-roll="8">Tirar D8</button>
+      <button data-roll="10">Tirar D10</button>
+      <button data-roll="12">Tirar D12</button>
+      <button data-roll="20">Tirar D20</button>
+      <button id="adv">Ventaja (2D20)</button>
+      <button id="many">4D6</button>
+    </div>
+    <div class="arena" id="arena"></div>
+    <div class="result" id="result">Elige una prueba.</div>
+  </div>
+</div>
+<script>
+const arena=document.getElementById('arena');
+const result=document.getElementById('result');
+function createDie(sides,label){
+  const wrap=document.createElement('div');
+  wrap.className='mock-die';
+  wrap.innerHTML=`<div class="die-shape die-d${sides}"><span>1</span><small>${label||`D${sides}`}</small></div><div class="meta">${label||`D${sides}`}</div>`;
+  return wrap;
+}
+function setRolling(die,isRolling){
+  const box=die.querySelector('.die-shape');
+  box.classList.toggle('is-rolling',isRolling);
+}
+function setValue(die,val){
+  die.querySelector('.die-shape > span').textContent=String(val);
+}
+function rand(max){ return Math.floor(Math.random()*max)+1; }
+function clearArena(){ arena.innerHTML=''; }
+function runDice(specs, summaryFn){
+  clearArena();
+  const entries=specs.map(spec=>{
+    const die=createDie(spec.sides,spec.label);
+    arena.appendChild(die);
+    setRolling(die,true);
+    return {node:die,...spec};
+  });
+  setTimeout(()=>{
+    entries.forEach(entry=>{
+      setValue(entry.node, entry.result);
+      setRolling(entry.node,false);
+    });
+    result.textContent=summaryFn(entries);
+  }, 1150);
+}
+document.querySelectorAll('[data-roll]').forEach(btn=>btn.addEventListener('click',()=>{
+  const sides=Number(btn.dataset.roll);
+  const res=rand(sides);
+  runDice([{sides,result:res}],()=>`Resultado: ${res}`);
+}));
+document.getElementById('adv').addEventListener('click',()=>{
+  const a=rand(20), b=rand(20), keep=Math.max(a,b);
+  runDice([{sides:20,result:a,label:'D20 A'},{sides:20,result:b,label:'D20 B'}],()=>`Ventaja: ${a} y ${b} → se conserva ${keep}`);
+});
+document.getElementById('many').addEventListener('click',()=>{
+  const vals=[rand(6),rand(6),rand(6),rand(6)];
+  runDice(vals.map(v=>({sides:6,result:v})),()=>`4D6: ${vals.join(' + ')} = ${vals.reduce((a,b)=>a+b,0)}`);
+});
+</script>
+<script src="./assets/dice-roulette.js?v=1"></script>
+</body>
+</html>
