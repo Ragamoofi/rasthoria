@@ -318,13 +318,23 @@ AUTORIDAD
 - No inventes una tirada ya realizada ni cambies su resultado.
 - Si el motor informa éxito, narra éxito; si informa fracaso, narra fracaso y sus consecuencias.
 
-TIRADAS
-- Pide check solo cuando exista incertidumbre significativa y el resultado importe.
+TIRADAS — REGLA CENTRAL D20 / SRD 5e
+- Los dados son la autoridad cuando el personaje INTENTA conseguir algo y el resultado es incierto. No decidas por narración un éxito o fracaso que debería resolver el d20.
+- PRESUNCIÓN A FAVOR DE TIRAR: si una acción razonablemente podría fallar Y ese fallo cambiaría la escena, pide check o save. Esto debe ocurrir con frecuencia; exploración, investigación, sigilo, interacción social con resistencia, persecuciones, obstáculos físicos, tareas técnicas bajo presión y peligros deben usar dados.
+- Usa ability check cuando el personaje actúa para superar una dificultad: Fuerza/Atletismo para esfuerzo físico, Destreza/Acrobacias o Sigilo para precisión/movimiento oculto, Inteligencia/Investigación y conocimientos para deducir o estudiar, Sabiduría/Percepción-Perspicacia-Supervivencia para percibir o leer situaciones, Carisma/Engaño-Intimidación-Persuasión-Interpretación para influir en otros.
+- Usa save cuando el personaje REACCIONA o RESISTE un peligro/efecto que ya le está ocurriendo: explosión, veneno, caída, miedo, derrumbe, trampa, etc. Las salvaciones usan skill=null.
+- Conversar normalmente, preguntar algo, elegir entre caminos, caminar sin peligro, abrir una puerta normal, recoger un objeto visible o consultar información evidente NO requieren tirada. La ELECCIÓN no se tira; se tira el intento incierto que nace de ella.
+- Tampoco tires si no existe ninguna consecuencia por fallar y el personaje puede repetir indefinidamente sin coste, riesgo ni presión.
+- Interacciones sociales: no tires por decir "hola" o hacer una pregunta normal. Sí tira si el jugador intenta convencer a alguien que se resiste, mentir, intimidar, manipular, negociar algo importante, ocultar intenciones o conseguir una concesión incierta.
+- Información oculta: si el jugador busca pistas, trampas, compartimentos, personas escondidas, mentiras o detalles que no son obvios, normalmente requiere Percepción, Investigación o Perspicacia.
+- Sigilo/oposición: esconderse, infiltrarse, robar, seguir a alguien sin ser visto, escapar de vigilancia o realizar una maniobra contra oposición requieren tirada cuando exista posibilidad real de ser descubierto o impedido.
+- Obstáculos y riesgo: forzar, romper, escalar, saltar, nadar, equilibrarse, perseguir, huir, conducir bajo peligro, desactivar, hackear, reparar o improvisar bajo presión requieren tirada cuando el resultado no sea seguro.
+- DC orientativa SRD/5e: 5 muy fácil (normalmente ni tires), 10 fácil, 15 moderada, 20 difícil, 25 muy difícil, 30 casi imposible. Ajusta por contexto; evita DC arbitrarias para castigar al jugador.
+- Ventaja/desventaja se usa por circunstancias claras del mundo, preparación, ayuda, posición, condiciones o herramientas; no para manipular el resultado deseado.
+- skill debe corresponder a ability. Si ninguna habilidad aplica, usa skill=null con la característica correcta.
 - Preguntas de estado como "¿qué llevo?", "¿qué tengo encima?", "¿dónde estoy?", "¿qué hora es?", "¿cómo estoy?" o consultas equivalentes NUNCA requieren check ni save: responde usando el estado recibido.
-- No pidas tiradas para acciones triviales, información obvia ni decisiones puramente narrativas.
-- skill debe corresponder a ability. Las salvaciones usan skill=null.
-- DC orientativa: 8 fácil, 10 normal, 12 moderada, 15 difícil, 18 muy difícil, 20+ excepcional.
-- Si solicitas check, effects debe estar vacío y encounter debe ser null; las consecuencias mecánicas van en success/failure.
+- Si solicitas check, detén la narración ANTES de saber si funciona: effects debe estar vacío y encounter debe ser null; las consecuencias mecánicas van en success/failure y la historia continuará después del resultado.
+- Un fracaso no tiene por qué bloquear la aventura. Cuando sea apropiado, aplica fallo con consecuencia: pérdida de tiempo, ruido, sospecha, posición peor, recurso gastado, información incompleta, peligro nuevo o una complicación coherente.
 
 COMBATE
 - Solo crea encounter cuando la situación realmente inicia combate. Debe incluir al menos un enemy.
@@ -520,6 +530,37 @@ function narrativeClaimsResolvedViolence(narrative) {
   return /\b(le cortas la cabeza|cortas su cabeza|su cabeza cae|cae su cabeza|lo decapitas|la decapitas|lo matas|la matas|muere al instante|cae muerto|cae muerta|lo atraviesas|la atraviesas|tu (?:katana|espada|cuchillo|bala|golpe) (?:le )?(?:corta|atraviesa|impacta)|impacta de lleno)\b/i.test(text);
 }
 
+function isInformationalOrTrivialDeclaration(campaign) {
+  const action=plainText(declaredAction(campaign)).trim();
+  if (!action) return true;
+
+  // Consultas de estado o acciones sin incertidumbre relevante.
+  const informational=/^(?:que|qué|cual|cuál|cuanto|cuánto|donde|dónde|como|cómo|tengo|llevo|mi inventario|inventario|estado|hora)\b/.test(action)
+    || /\b(que llevo|que tengo|donde estoy|que hora|como estoy|mi inventario|reviso (?:mi )?(?:inventario|mochila|equipo))\b/.test(action);
+  if (informational) return true;
+
+  const trivial=/\b(saludo|digo hola|me siento|me levanto|miro mi (?:mano|ropa|equipo)|camino hacia|voy hacia|entro por la puerta abierta|abro la puerta(?: normal)?|cierro la puerta|recojo|agarro|tomo el objeto visible|bebo agua|como |duermo|descanso)\b/.test(action);
+  const pressure=/\b(rapido|rápido|antes de|sin que|a escondidas|sigilo|cerrad|bloquead|trabada|forzar|peligro|persec|mientras|bajo fuego|contra reloj|vigil|guardia|trampa|ocult|resiste|se niega)\b/.test(action);
+  return trivial && !pressure;
+}
+
+function actionLikelyNeedsD20(campaign) {
+  if (campaign?.combat || campaign?.pending) return false;
+  const action=plainText(declaredAction(campaign)).trim();
+  if (!action || isInformationalOrTrivialDeclaration(campaign) || isHostileDeclaration(campaign)) return false;
+
+  // Acciones que en una mesa d20 normalmente se resuelven con prueba si existe oposición,
+  // información oculta, peligro, presión o una consecuencia clara por fallar.
+  const social=/\b(convenz|convenc|persuad|persuadir|mient|mentir|engañ|engan|intimid|amenaz|negoci|manipul|seduc|distraig|distraer|me hago pasar|finjo)\b/.test(action);
+  const hidden=/\b(investig|busco (?:pistas|una pista|algo ocult|huellas|pruebas|trampas|un compartimento)|registro|examino|inspeccion|escucho|percib|detecto|rastre|sigo (?:sus|las|los) huellas|leo sus intenciones|averigu|descifro)\b/.test(action);
+  const stealth=/\b(escond|sigilo|infiltr|me cuelo|robo|hurt|carter|sigo (?:a|al|la) .*sin|sin que me vean|sin ser visto|paso desapercib|escapo de la vigilancia)\b/.test(action);
+  const physical=/\b(forz|romp|derrib|trep|escal|salto|saltar|nado|nadar|equilibr|cruzo .*pelig|corro para|persigo|huyo|huir|escapo|esquiv|maniobr|empujo|levanto .*pesad|aguanto|resisto)\b/.test(action);
+  const technical=/\b(hack|pirate|desactiv|desarmo|reparo|reparar|improvis|manipulo (?:la|el) cerradura|ganzu|abro .*cerrad|descifro|program|sabote|falsific|oper[oa] .*bajo|conduzco|piloto)\b/.test(action);
+  const uncertainty=/\b(intento|trato de|pruebo a|quiero lograr|a ver si|sin que|antes de que|bajo presion|bajo presión|contra reloj|arriesgo|dificil|difícil|peligro|ocult|cerrad|bloquead|vigil|resiste|opone)\b/.test(action);
+
+  return social || hidden || stealth || physical || technical || uncertainty;
+}
+
 function semanticProblem(response,campaign) {
   if (!response || campaign?.combat) return "";
   if (isHostileDeclaration(campaign)) {
@@ -529,6 +570,12 @@ function semanticProblem(response,campaign) {
     if (narrativeClaimsResolvedViolence(response.narrative)) {
       return "La narración dio por exitoso un ataque del jugador antes de que el motor resolviera iniciativa/ataque/daño.";
     }
+  }
+  if (actionLikelyNeedsD20(campaign) && !response.check && !response.encounter?.length) {
+    return "La acción declarada tiene incertidumbre, oposición, información oculta, riesgo o una consecuencia significativa por fallar. Debe resolverse con una prueba d20 antes de narrar el resultado.";
+  }
+  if (isInformationalOrTrivialDeclaration(campaign) && response.check) {
+    return "La acción es informativa o trivial y no justifica una tirada. Resuélvela directamente sin check.";
   }
   return "";
 }
@@ -789,6 +836,7 @@ Devuelve solo el JSON solicitado.`;
     const compact = publicCampaign(campaign);
     const isOpening = Number(compact.revision||0) <= 1 && (compact.messages?.length||0) <= 3;
     const hostileTurn = isHostileDeclaration(campaign);
+    const d20Turn = actionLikelyNeedsD20(campaign);
     const sceneDirective = isOpening
       ? "ESTE ES EL INICIO DE LA CAMPAÑA. Construye una apertura evocadora y cinematográfica siguiendo estrictamente APERTURA DE CAMPAÑA. Prioriza atmósfera, lugar, humanidad y un gancho que ocurra en escena."
       : "CONTINÚA LA ESCENA. Mantén el mismo nivel de calidad literaria, continuidad, espacialidad y voz de personajes. Reacciona exactamente a lo que acaba de hacer o decir el personaje.";
@@ -797,11 +845,15 @@ Devuelve solo el JSON solicitado.`;
       ? "\n\nACCIÓN HOSTIL DETECTADA\nEl jugador ha declarado un INTENTO de violencia. Si el objetivo puede reaccionar y aún no hay combate, está TERMINANTEMENTE PROHIBIDO narrar que el ataque impacta, hiere, decapita o mata. Narra solo el inicio del movimiento/reacción del mundo y devuelve encounter con al menos un enemy para que el motor lance iniciativa. La redacción del jugador describe intención, NO éxito automático."
       : "";
 
+    const d20Directive = d20Turn
+      ? "\n\nRESOLUCIÓN D20 OBLIGATORIA\nLa acción declarada contiene una incertidumbre significativa. Debes devolver check con la característica/habilidad, DC y ventaja/desventaja apropiadas. Narra solamente la preparación, intento o tensión previa; NO narres todavía si funcionó. El motor hará la tirada y después volverás a recibir el resultado para narrar la consecuencia."
+      : "";
+
     const repairDirective = repairHint
       ? `\n\nCORRECCIÓN DEL INTENTO ANTERIOR\nLa respuesta previa no encajó con el motor por este motivo: ${repairHint}. Corrige ese problema sin repetir el error ni cambiar hechos ya establecidos.`
       : "";
 
-    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${hostilityDirective}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
+    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${hostilityDirective}${d20Directive}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
 
     try {
       let parsed = await runStructured(env,{
@@ -818,7 +870,7 @@ Devuelve solo el JSON solicitado.`;
       const semanticIssue = semanticProblem(response,campaign);
       if (semanticIssue) {
         console.warn("RASTHOR·IA semantic repair:",semanticIssue);
-        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno. No otorgues éxito automático a una acción hostil. Si el objetivo puede reaccionar y no hay combate, encounter DEBE contener al menos un adversario y la narración debe detenerse ANTES del impacto para que los dados decidan.`;
+        const repairPrompt = userPrompt + `\n\nREPARACIÓN OBLIGATORIA\nLa respuesta anterior fue rechazada semánticamente: ${semanticIssue}\nGenera de nuevo el turno respetando el sistema d20. Si es una acción incierta no hostil, devuelve check y detén la narración antes de conocer el resultado. Si es un ataque contra alguien capaz de reaccionar y no hay combate, encounter DEBE contener al menos un adversario. Si la acción es trivial o meramente informativa, NO pidas tirada.`;
         parsed = await runStructured(env,{
           messages:[
             {role:"system",content:SYSTEM},
