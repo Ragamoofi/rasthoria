@@ -1,4 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const BUILD = "2026-09-21-outcome-inventory-dice";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -332,7 +333,8 @@ Crear una campaña viva, coherente, impredecible y con consecuencias persistente
 ADAPTACIÓN DE GÉNERO
 - Las cuatro clases del motor son SOLO bases mecánicas. Combatiente, Especialista, Canalizador y Protector pueden representar profesiones, entrenamiento, tecnología, mutaciones, poderes, magia, medicina, liderazgo u otras explicaciones según el mundo.
 - El catálogo de armas, protecciones, curación y suministros es una abstracción mecánica. En la narración dales una apariencia coherente con la ambientación.
-- En el primer turno, si el equipo genérico no encaja, usa item_rename para darle nombres apropiados al mundo sin alterar sus estadísticas.
+- Los nombres genéricos del inventario son SOLO marcadores mecánicos temporales. En cuanto el mundo/época permite concretarlos, usa item_rename para que el inventario muestre objetos reales del personaje (por ejemplo Pistola, Chaleco antibalas, Botiquín, Linterna), sin alterar sus estadísticas. Hazlo especialmente en la apertura y cuando el jugador pregunta qué lleva o revisa sus pertenencias.
+- Si la narración establece que el personaje ya posee un objeto concreto equivalente a un objeto genérico, el inventario DEBE reflejar ese nombre en el mismo turno mediante item_rename. No digas "tienes una pistola" mientras el inventario siga diciendo "Arma a distancia".
 - Una campaña realista puede no tener magia. Una campaña contemporánea no debe introducir espadas, tabernas, reinos o hechizos salvo que la premisa los pida.
 - No toda historia necesita salvar el mundo. Respeta campañas íntimas, sociales, deportivas, románticas, profesionales o de investigación.
 
@@ -638,7 +640,28 @@ function isHostileDeclaration(campaign) {
 
 function narrativeClaimsResolvedViolence(narrative) {
   const text=plainText((Array.isArray(narrative)?narrative:[]).map(x=>x?.text||"").join(" "));
-  return /\b(le cortas la cabeza|cortas su cabeza|su cabeza cae|cae su cabeza|lo decapitas|la decapitas|lo matas|la matas|muere al instante|cae muerto|cae muerta|lo atraviesas|la atraviesas|tu (?:katana|espada|cuchillo|bala|golpe) (?:le )?(?:corta|atraviesa|impacta)|impacta de lleno)\b/i.test(text);
+  return /\b(le cortas la cabeza|cortas su cabeza|su cabeza cae|cae su cabeza|lo decapitas|la decapitas|lo matas|la matas|muere al instante|cae muerto|cae muerta|lo atraviesas|la atraviesas|impacta de lleno|la bala (?:le|lo|la) (?:da|impacta|alcanza)|el disparo (?:le|lo|la) (?:da|impacta|alcanza)|se desploma|cae al suelo|cae de rodillas|grita de dolor|gime de dolor|queda herido|queda herida|empieza a sangrar|sangra por|tu (?:katana|espada|cuchillo|bala|golpe) (?:le )?(?:corta|atraviesa|impacta))\b/i.test(text);
+}
+
+function narrativeClaimsCheckOutcome(narrative) {
+  const text=plainText((Array.isArray(narrative)?narrative:[]).map(x=>x?.text||"").join(" "));
+  return /\b(logras|consigues|fallas|fracasas|no logras|no consigues|la puerta (?:cede|se abre)|encuentras (?:la|el|una|un)|descubres|convences|persuades|te cree|acepta tu|rechaza tu|te detecta|te descubre|pasas desapercibido|escapas|consigues escapar|te escondes|rompes (?:la|el)|desactivas|hackeas|descifras|fuerzas (?:la|el)|superas (?:la|el)|pierdes el equilibrio|resbalas y caes)\b/i.test(text);
+}
+
+const GENERIC_ITEM_NAMES = new Set([
+  "arma principal","arma precisa","arma a distancia","foco / arma ligera","arma contundente",
+  "proteccion pesada","proteccion media","proteccion ligera","ropa / proteccion basica",
+  "recurso de curacion","suministros","herramientas","fuente de luz"
+]);
+
+function genericInventoryItems(campaign) {
+  const inventory=Array.isArray(campaign?.character?.inventory)?campaign.character.inventory:[];
+  return inventory.filter(i=>GENERIC_ITEM_NAMES.has(plainText(i?.name).trim()));
+}
+
+function isInventoryDeclaration(campaign) {
+  const action=plainText(declaredAction(campaign));
+  return /\b(que tengo|que llevo|inventario|bolsillo|bolsillos|mochila|pertenencias|equipo llevo|reviso mi equipo|reviso mis cosas)\b/.test(action);
 }
 
 function isInformationalOrTrivialDeclaration(campaign) {
@@ -675,18 +698,31 @@ function actionLikelyNeedsD20(campaign) {
 function semanticProblem(response,campaign) {
   if (!response || campaign?.combat) return "";
   if (isHostileDeclaration(campaign)) {
-    if (!response.encounter?.length && !response.check) {
-      return "El jugador declaró un ataque deliberado contra un personaje, pero la respuesta resolvió la escena sin abrir combate ni pedir una resolución del motor.";
+    if (!response.encounter?.length) {
+      return "El jugador declaró un ataque deliberado contra un personaje capaz de reaccionar. Debe abrirse un encounter y resolverse iniciativa/ataque/daño por el motor; un check de habilidad no sustituye el combate.";
     }
     if (narrativeClaimsResolvedViolence(response.narrative)) {
-      return "La narración dio por exitoso un ataque del jugador antes de que el motor resolviera iniciativa/ataque/daño.";
+      return "La narración describió impacto, dolor, caída, herida o muerte antes de que el motor resolviera iniciativa/ataque/daño.";
     }
+  }
+  if (response.check && narrativeClaimsCheckOutcome(response.narrative)) {
+    return "La narración resolvió el éxito o fracaso de una prueba antes de lanzar el d20. Debe detenerse en el intento, tensión o preparación previa.";
   }
   if (actionLikelyNeedsD20(campaign) && !response.check && !response.encounter?.length) {
     return "La acción declarada tiene incertidumbre, oposición, información oculta, riesgo o una consecuencia significativa por fallar. Debe resolverse con una prueba d20 antes de narrar el resultado.";
   }
   if (isInformationalOrTrivialDeclaration(campaign) && response.check) {
     return "La acción es informativa o trivial y no justifica una tirada. Resuélvela directamente sin check.";
+  }
+
+  const generic=genericInventoryItems(campaign);
+  const opening=Number(campaign?.revision||0)<=1 && (Array.isArray(campaign?.messages)?campaign.messages.length:0)<=3;
+  if (generic.length && (opening || isInventoryDeclaration(campaign))) {
+    const renamed=new Set((response.effects||[]).filter(e=>e?.type==="item_rename").map(e=>e.target));
+    const missing=generic.filter(i=>!renamed.has(i.id));
+    if (missing.length) {
+      return "El inventario todavía contiene nombres genéricos. Concreta todos esos objetos con item_rename antes de describir qué lleva el personaje: "+missing.map(i=>i.name).join(", ")+".";
+    }
   }
   return "";
 }
@@ -718,12 +754,15 @@ function normalizeResponse(raw, campaign) {
     privateMemory: typeof r.privateMemory === "string" ? clip(r.privateMemory,14000) : currentVault,
   };
   if (out.encounter?.length) {
-    out.effects=[];
+    // Los cambios cosméticos de nombre son seguros antes de iniciativa;
+    // los efectos mecánicos deben esperar a que el motor resuelva.
+    out.effects=out.effects.filter(e=>e.type==="item_rename");
     out.check=null;
     out.combatIntent=null;
   }
   if (out.check) {
-    out.effects=[];
+    // Permite contextualizar el inventario aunque la escena se detenga para tirar.
+    out.effects=out.effects.filter(e=>e.type==="item_rename");
     out.encounter=null;
   }
   if (!out.narrative.length) out.narrative=[{kind:"narrator",speaker:"",text:"El mundo guarda silencio un instante, pero la situación permanece abierta. ¿Qué haces?"}];
@@ -799,13 +838,13 @@ export default {
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/connection")) {
       if (url.pathname === "/api/connection") {
-        return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false},200,origin);
+        return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
       }
-      return json({ok:true,service:"RASTHOR·IA Cloud DM",model:MODEL},200,origin);
+      return json({ok:true,service:"RASTHOR·IA Cloud DM",model:MODEL,build:BUILD},200,origin);
     }
 
     if (url.pathname === "/api/connection" && (request.method === "POST" || request.method === "DELETE")) {
-      return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false},200,origin);
+      return json({connected:true,model:"Llama 3.3 70B Fast · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
     }
 
     if (request.method === "POST" && url.pathname === "/api/random-campaign") {
@@ -948,6 +987,7 @@ Devuelve solo el JSON solicitado.`;
     const isOpening = Number(compact.revision||0) <= 1 && (compact.messages?.length||0) <= 3;
     const hostileTurn = isHostileDeclaration(campaign);
     const d20Turn = actionLikelyNeedsD20(campaign);
+    const genericItems = genericInventoryItems(campaign);
     const sceneDirective = isOpening
       ? "ESTE ES EL INICIO DE LA CAMPAÑA. Construye una apertura evocadora y cinematográfica siguiendo estrictamente APERTURA DE CAMPAÑA. Prioriza atmósfera, lugar, humanidad y un gancho que ocurra en escena."
       : "CONTINÚA LA ESCENA. Mantén el mismo nivel de calidad literaria, continuidad, espacialidad y voz de personajes. Reacciona exactamente a lo que acaba de hacer o decir el personaje.";
@@ -960,11 +1000,15 @@ Devuelve solo el JSON solicitado.`;
       ? "\n\nRESOLUCIÓN D20 OBLIGATORIA\nLa acción declarada contiene una incertidumbre significativa. Debes devolver check con la característica/habilidad, DC y ventaja/desventaja apropiadas. Narra solamente la preparación, intento o tensión previa; NO narres todavía si funcionó. El motor hará la tirada y después volverás a recibir el resultado para narrar la consecuencia."
       : "";
 
+    const inventoryDirective = genericItems.length
+      ? "\n\nINVENTARIO POR CONCRETAR\nEl estado aún contiene nombres mecánicos genéricos. Concrétalos según ESTE mundo y la historia ya establecida usando item_rename, sin cambiar estadísticas. Objetos: "+JSON.stringify(genericItems.map(i=>({id:i.id,catalog:i.catalog,name:i.name})))+". Si la historia ya ha establecido un equivalente concreto (por ejemplo una pistola), usa exactamente ese objeto. item_rename puede coexistir con check o encounter."
+      : "";
+
     const repairDirective = repairHint
       ? `\n\nCORRECCIÓN DEL INTENTO ANTERIOR\nLa respuesta previa no encajó con el motor por este motivo: ${repairHint}. Corrige ese problema sin repetir el error ni cambiar hechos ya establecidos.`
       : "";
 
-    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${hostilityDirective}${d20Directive}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
+    const userPrompt = `ESTADO ACTUAL DE LA CAMPAÑA\n${JSON.stringify(compact)}\n\nDIRECTIVA DE ESCENA\n${sceneDirective}${hostilityDirective}${d20Directive}${inventoryDirective}${repairDirective}\n\nProcesa exclusivamente el siguiente turno respetando lastEvent, los resultados de dados ya presentes y el estado del motor. Devuelve solo el objeto JSON solicitado.`;
 
     try {
       let parsed = await runStructured(env,{
