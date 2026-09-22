@@ -1,0 +1,48 @@
+RASTHOR·IA — NARRADOR IA MULTIPROVEEDOR v16
+===========================================
+
+OBJETIVO
+--------
+Esta versión deja de depender obligatoriamente de la cuota gratuita de Workers AI.
+Cada jugador puede elegir el cerebro del Narrador sin perder su campaña:
+
+1. RASTHOR·IA Gratis (Cloudflare Workers AI)
+2. OpenAI usando su propia clave de OpenAI API
+3. Gemini usando su propia clave de Gemini API / Google AI Studio
+
+IMPORTANTE
+----------
+- ChatGPT Plus/Pro NO equivale a saldo de OpenAI API.
+- Gemini Advanced tampoco equivale automáticamente a cuota de Gemini API.
+- Para OpenAI/Gemini el jugador pega una API key de ese proveedor.
+- La API key nunca se guarda dentro de la campaña ni se sube al repositorio.
+- Si el jugador elige guardarla, queda en localStorage de ese navegador.
+- El Worker recibe la key solo para reenviar esa petición al proveedor elegido.
+- El Worker no usa Workers AI cuando el proveedor seleccionado es OpenAI o Gemini.
+
+CÓMO PROBAR
+-----------
+1. Copia los archivos respetando sus carpetas.
+2. Haz Commit + Push con GitHub Desktop.
+3. Espera a que GitHub Pages y Cloudflare Workers terminen el despliegue.
+4. Haz Ctrl+F5.
+5. Arriba aparecerá un botón "Narrador IA".
+6. Elige OpenAI o Gemini, pega una key y pulsa "Probar conexión".
+7. Si responde correctamente, pulsa "Guardar y usar".
+8. Crea una campaña nueva y prueba varios turnos.
+
+CAMBIOS DE RESILIENCIA
+----------------------
+- "reviso mis bolsillos" y consultas similares ya se tratan como acciones triviales/informativas y no deberían pedir D20.
+- Las respuestas se normalizan y las incompatibilidades mecánicas se corrigen en el Worker antes de llegar al juego.
+- Un error de clave/cuota del proveedor externo devuelve un mensaje claro y conserva el turno para reintentar.
+- La cuota agotada de Cloudflare no afecta a OpenAI o Gemini porque esas rutas no llaman env.AI.
+
+ARCHIVOS NUEVOS/MODIFICADOS
+----------------------------
+- index.html
+- assets/ai-provider.css
+- assets/ai-provider.js
+- cloudflare-worker/src/index.js
+- README.md
+- cloudflare-worker/README.md

@@ -410,6 +410,7 @@
 .character-ai-actions{margin-top:2px}
 .inspiration button:disabled{opacity:.55;cursor:wait;transform:none!important}
 </style>
+<link rel="stylesheet" href="./assets/ai-provider.css?v=16">
 </head>
 <body>
 <div id="root"></div>
@@ -458,6 +459,8 @@
   else boot();
 })();
 </script>
+
+<script src="./assets/ai-provider.js?v=16"></script>
 
 <script type="module">
 const decode=b64=>new TextDecoder().decode(Uint8Array.from(atob(b64),c=>c.charCodeAt(0)));

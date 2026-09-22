@@ -2,35 +2,29 @@
 
 **Tu historia aún no ha sido escrita.**
 
-RPG narrativo dinámico con campañas libres, memoria persistente, consecuencias, combate d20 y un **Narrador IA** en la nube.
+RPG narrativo dinámico con campañas libres, memoria persistente, consecuencias, combate d20, dados tipo ruleta interna y un Narrador IA intercambiable.
+
+## Narrador IA v16
+
+RASTHOR·IA ya no depende de un único modelo. Cada navegador puede elegir:
+
+- **RASTHOR·IA Gratis** — Cloudflare Workers AI administrado por el proyecto. No requiere clave, pero comparte una cuota diaria.
+- **OpenAI** — el jugador usa su propia clave de OpenAI API. Modelo recomendado por defecto: `gpt-5.6-luna`.
+- **Gemini** — el jugador usa su propia clave de Gemini API / Google AI Studio. Modelo recomendado por defecto: `gemini-3.8-flash`.
+
+El selector aparece como **Narrador IA** dentro del juego. La campaña, los guardados, el motor de dados y las reglas no dependen del proveedor elegido y se puede cambiar de IA entre turnos.
+
+Las claves no se escriben en los guardados ni en el repositorio. Si el jugador decide recordarlas, se almacenan únicamente en el navegador; el Worker las recibe por HTTPS para reenviar la petición al proveedor seleccionado.
 
 ## Archivos principales
 
 - `index.html` — juego web autocontenido.
-- `assets/dice-roulette.css` — aspecto visual de los dados tipo ruleta interna.
-- `assets/dice-roulette.js` — animación de números sincronizada con el resultado real del motor.
-- `DADOS_RULETA_LAB.html` — laboratorio visual de dados.
-- `cloudflare-worker/` — backend del Narrador mediante Cloudflare Workers AI.
-
-## Narrador IA v15
+- `assets/dice-roulette.css` / `assets/dice-roulette.js` — dados 2D con ruleta interna.
+- `assets/ai-provider.css` / `assets/ai-provider.js` — selector multiproveedor del Narrador.
+- `cloudflare-worker/` — proxy/orquestador del Narrador y modo gratuito de Workers AI.
 
 Worker de producción:
 
 `https://rasthoria-cloud-dm.o-sariego.workers.dev`
 
-Modelos configurados:
-
-- principal: **Qwen3 30B-A3B FP8**;
-- respaldo de capacidad/JSON: **Gemma 4 26B A4B**.
-
-La v15 está enfocada en que una caída o demora de Workers AI no deje la campaña muda:
-
-- la primera escena usa una ruta propia, más corta y robusta;
-- si toda la IA falla al abrir una campaña, se genera una apertura contextual de respaldo en vez del mensaje genérico de espera;
-- las respuestas JSON se validan localmente sin depender del modo JSON estricto de un único modelo;
-- se evita gastar otra llamada de IA solo para reparar errores semánticos sencillos;
-- el frontend muestra si el problema fue cuota, capacidad o timeout en vez de ocultarlo;
-- preguntas y roleo normal no fuerzan D20; el dado se reserva para incertidumbre, riesgo, oposición o tareas técnicas;
-- el turno del jugador se conserva si la IA no responde.
-
-Los jugadores no necesitan iniciar sesión en ChatGPT ni pegar una API key.
+Los proveedores externos no consumen la cuota de Workers AI: el Worker funciona únicamente como relay sin persistir la clave en la aplicación.

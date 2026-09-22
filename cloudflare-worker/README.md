@@ -1,37 +1,33 @@
-# RASTHOR·IA Cloud Narrator
+# RASTHOR·IA Narrador — Cloudflare Worker
 
-Backend del **Narrador** de RASTHOR·IA usando Cloudflare Workers AI.
+Build v16: `2026-09-22-rules-v16-multi-ai-byok`
 
-## Cloudflare
+El Worker cumple dos funciones:
 
-- Root directory: `cloudflare-worker`
-- Main: `src/index.js`
-- AI binding: `AI`
-- Worker esperado: `rasthoria-cloud-dm`
+1. Narrador gratuito mediante Cloudflare Workers AI.
+2. Relay sin persistencia para claves BYOK de OpenAI o Gemini.
 
-## Modelos v15
+## Cabeceras del frontend
 
-- principal: `@cf/qwen/qwen3-30b-a3b-fp8`
-- fallback: `@cf/google/gemma-4-26b-a4b-it`
+- `X-Rasthoria-AI-Provider`: `cloudflare`, `openai` o `gemini`.
+- `X-Rasthoria-AI-Model`: modelo elegido.
+- `X-Rasthoria-AI-Key`: solo para OpenAI/Gemini.
 
-El Narrador solicita JSON por instrucciones y lo valida/normaliza localmente. Esto permite cambiar de modelo cuando hay timeout, capacidad temporal o JSON imperfecto.
+La clave se usa únicamente en memoria durante la petición para llamar al proveedor y no se incluye en logs explícitos, respuestas, guardados ni base de datos.
 
-## Endpoints
+## Rutas
 
 - `GET /health`
 - `GET /api/connection`
+- `POST /api/provider-test`
 - `POST /api/random-campaign`
 - `POST /api/character-build`
 - `POST /api/gm`
 
-## Resiliencia v15
+## Modelos por defecto
 
-- Apertura de campaña con prompt y contrato reducidos, separados del turno normal.
-- Fallback contextual de apertura si Workers AI falla, para que la campaña nunca empiece con una pantalla vacía.
-- Detección de cuota (`3036`), capacidad (`3040`) y timeout.
-- No se lanza un segundo modelo cuando la cuenta ya agotó su cuota diaria, porque compartiría la misma cuota.
-- Reparaciones mecánicas sencillas se hacen determinísticamente, sin gastar otra inferencia.
-- Campaña aleatoria y constructor de personaje mantienen fallbacks locales.
-- Se aceptan GitHub Pages, `file://`, localhost y 127.0.0.1 para pruebas.
+- Cloudflare: `@cf/qwen/qwen3-30b-a3b-fp8`, con Gemma como fallback del modo gratuito.
+- OpenAI: `gpt-5.6-luna`.
+- Gemini: `gemini-3.8-flash`.
 
-Cloudflare Workers AI aplica una cuota gratuita diaria compartida por cuenta. Si se agota, el juego mantiene un respaldo contextual hasta que la cuota se renueve.
+El modo OpenAI/Gemini no llama a `env.AI`, por lo que una cuota agotada de Workers AI no interrumpe esas partidas.

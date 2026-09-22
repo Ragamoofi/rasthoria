@@ -1,6 +1,6 @@
 const MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 const FALLBACK_MODEL = "@cf/google/gemma-4-26b-a4b-it";
-const BUILD = "2026-09-22-rules-v15-narrador-recovery";
+const BUILD = "2026-09-22-rules-v16-multi-ai-byok";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -199,7 +199,7 @@ function cors(origin) {
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-Rasthoria-AI-Provider, X-Rasthoria-AI-Key, X-Rasthoria-AI-Model",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
     "Cache-Control": "no-store",
@@ -779,7 +779,7 @@ function isInformationalOrTrivialDeclaration(campaign) {
   const action=normalizedDeclaration(campaign);
   if (!action) return true;
   if (/^(?:que|cual|cuanto|donde|como|quien|cuando|por que|para que|tengo|llevo|mi inventario|inventario|estado|hora)\b/.test(action)) return true;
-  return /\b(que llevo|que tengo|donde estoy|que hora|como estoy|mi inventario|reviso (?:mi )?(?:inventario|mochila|equipo)|que veo|que escucho a simple vista|quien esta aqui)\b/.test(action);
+  return /\b(que llevo|que tengo|donde estoy|que hora|como estoy|mi inventario|reviso (?:mi )?(?:inventario|mochila|equipo|bolsillos?)|que veo|que escucho a simple vista|quien esta aqui)\b/.test(action);
 }
 
 function isOrdinaryRoleplayDeclaration(campaign) {
@@ -1078,6 +1078,162 @@ function aiTimeoutError(error) {
   return /(?:ai_timeout|timeout|timed out|3007)/i.test(aiErrorText(error));
 }
 
+
+const AI_PROVIDER_DEFAULTS = {
+  cloudflare: { model: MODEL, label: "RASTHOR·IA Gratis" },
+  openai: { model: "gpt-5.6-luna", label: "OpenAI" },
+  gemini: { model: "gemini-3.8-flash", label: "Gemini" },
+};
+
+function aiContextFromRequest(request) {
+  let provider=plainText(request?.headers?.get("X-Rasthoria-AI-Provider")||"cloudflare").trim();
+  if(!["cloudflare","openai","gemini"].includes(provider)) provider="cloudflare";
+  const rawKey=String(request?.headers?.get("X-Rasthoria-AI-Key")||"").trim();
+  const requested=String(request?.headers?.get("X-Rasthoria-AI-Model")||"").trim();
+  const safeModel=/^[A-Za-z0-9._:-]{2,100}$/.test(requested)?requested:"";
+  return {
+    provider,
+    apiKey: rawKey.slice(0,500),
+    model: safeModel || AI_PROVIDER_DEFAULTS[provider].model,
+    label: AI_PROVIDER_DEFAULTS[provider].label,
+    external: provider!=="cloudflare",
+  };
+}
+
+class ProviderAIError extends Error {
+  constructor(provider,status,code,message) {
+    super(message||`${provider} request failed`);
+    this.name="ProviderAIError";
+    this.provider=provider;
+    this.status=Number(status)||502;
+    this.code=String(code||"provider_error");
+  }
+}
+
+function externalProviderError(error) {
+  return error instanceof ProviderAIError || ["openai","gemini"].includes(error?.provider);
+}
+
+function providerErrorMessage(error,ai) {
+  const provider=ai?.provider||error?.provider||"IA";
+  const status=Number(error?.status)||0;
+  const code=String(error?.code||"").toLowerCase();
+  if(status===401 || status===403 || /invalid.*key|api.?key|auth/.test(code+" "+aiErrorText(error))) {
+    return provider==="openai"
+      ? "La clave API de OpenAI no es válida o no tiene acceso. Revisa Narrador IA → OpenAI."
+      : "La clave API de Gemini no es válida o no tiene acceso. Revisa Narrador IA → Gemini.";
+  }
+  if(status===429 || /quota|rate|limit|billing|insufficient/.test(code+" "+aiErrorText(error))) {
+    return `Tu cuenta de ${provider==="openai"?"OpenAI":"Gemini"} alcanzó un límite de uso o facturación. La partida quedó guardada; cambia de Narrador IA o revisa la cuota de esa cuenta.`;
+  }
+  return `El Narrador de ${provider==="openai"?"OpenAI":"Gemini"} no pudo responder ahora. Tu turno quedó guardado; puedes reintentar o cambiar de proveedor.`;
+}
+
+async function fetchWithTimeout(url,options,timeoutMs=22000) {
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),Math.max(5000,Number(timeoutMs)||22000));
+  try {
+    return await fetch(url,{...options,signal:controller.signal});
+  } catch(error) {
+    if(error?.name==="AbortError") throw new ProviderAIError("external",504,"timeout","AI provider timeout");
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
+function extractOpenAIText(data) {
+  if(typeof data?.output_text==="string" && data.output_text.trim()) return data.output_text;
+  const chunks=[];
+  for(const item of Array.isArray(data?.output)?data.output:[]) {
+    for(const part of Array.isArray(item?.content)?item.content:[]) {
+      if(typeof part?.text==="string") chunks.push(part.text);
+      else if(typeof part?.content==="string") chunks.push(part.content);
+    }
+  }
+  return chunks.join("\n").trim();
+}
+
+async function runOpenAIJSON(ai,{messages,max_tokens=900,timeoutMs=22000}) {
+  if(!ai.apiKey) throw new ProviderAIError("openai",401,"missing_api_key","Falta la clave API de OpenAI.");
+  const response=await fetchWithTimeout("https://api.openai.com/v1/responses",{
+    method:"POST",
+    headers:{"Authorization":`Bearer ${ai.apiKey}`,"Content-Type":"application/json"},
+    body:JSON.stringify({
+      model:ai.model||AI_PROVIDER_DEFAULTS.openai.model,
+      input:withJsonInstruction(messages),
+      max_output_tokens:Math.max(256,Math.min(4000,Number(max_tokens)||900)),
+      text:{format:{type:"json_object"}},
+    })
+  },timeoutMs);
+  let data={};
+  try { data=await response.json(); } catch {}
+  if(!response.ok) {
+    const err=data?.error||{};
+    throw new ProviderAIError("openai",response.status,err.code||err.type||"openai_error",err.message||`OpenAI HTTP ${response.status}`);
+  }
+  const parsed=parseJSONLoose(extractOpenAIText(data));
+  if(!parsed) throw new ProviderAIError("openai",502,"invalid_json","OpenAI no devolvió JSON utilizable.");
+  return {parsed,model:ai.model,provider:"openai"};
+}
+
+function geminiContents(messages) {
+  const system=[]; const contents=[];
+  for(const m of Array.isArray(messages)?messages:[]) {
+    const text=String(m?.content||"");
+    if(!text) continue;
+    if(m.role==="system") { system.push(text); continue; }
+    contents.push({role:m.role==="assistant"?"model":"user",parts:[{text}]});
+  }
+  return {system:system.join("\n\n"),contents};
+}
+
+async function runGeminiJSON(ai,{messages,max_tokens=900,temperature=0.5,top_p=0.9,timeoutMs=22000}) {
+  if(!ai.apiKey) throw new ProviderAIError("gemini",401,"missing_api_key","Falta la clave API de Gemini.");
+  const prepared=withJsonInstruction(messages);
+  const parts=geminiContents(prepared);
+  const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(ai.model||AI_PROVIDER_DEFAULTS.gemini.model)}:generateContent`;
+  const body={
+    contents:parts.contents,
+    generationConfig:{
+      maxOutputTokens:Math.max(256,Math.min(4000,Number(max_tokens)||900)),
+      temperature:Math.max(0,Math.min(1.2,Number(temperature)||0.5)),
+      topP:Math.max(0.1,Math.min(1,Number(top_p)||0.9)),
+      responseMimeType:"application/json",
+    }
+  };
+  if(parts.system) body.systemInstruction={parts:[{text:parts.system}]};
+  const response=await fetchWithTimeout(endpoint,{
+    method:"POST",
+    headers:{"x-goog-api-key":ai.apiKey,"Content-Type":"application/json"},
+    body:JSON.stringify(body),
+  },timeoutMs);
+  let data={};
+  try { data=await response.json(); } catch {}
+  if(!response.ok) {
+    const err=data?.error||{};
+    throw new ProviderAIError("gemini",response.status,err.status||"gemini_error",err.message||`Gemini HTTP ${response.status}`);
+  }
+  const text=(data?.candidates?.[0]?.content?.parts||[]).map(x=>typeof x?.text==="string"?x.text:"").join("\n").trim();
+  const parsed=parseJSONLoose(text);
+  if(!parsed) throw new ProviderAIError("gemini",502,"invalid_json","Gemini no devolvió JSON utilizable.");
+  return {parsed,model:ai.model,provider:"gemini"};
+}
+
+async function runExternalJSON(ai,args) {
+  let firstError=null;
+  for(let attempt=0;attempt<2;attempt++) {
+    try {
+      if(ai.provider==="openai") return await runOpenAIJSON(ai,{...args,temperature:attempt?0.25:args.temperature});
+      if(ai.provider==="gemini") return await runGeminiJSON(ai,{...args,temperature:attempt?0.25:args.temperature});
+      throw new ProviderAIError(ai.provider,400,"unsupported_provider","Proveedor no compatible.");
+    } catch(error) {
+      firstError ||= error;
+      const status=Number(error?.status)||0;
+      if([400,401,403,404,429].includes(status) || attempt===1) throw firstError;
+    }
+  }
+  throw firstError || new ProviderAIError(ai.provider,502,"provider_error","No se pudo usar el proveedor.");
+}
+
 function withJsonInstruction(messages) {
   const rule = `\n\nFORMATO OBLIGATORIO: responde SOLO con un objeto JSON válido. Sin markdown, sin bloques de código, sin análisis visible y sin texto antes o después del JSON.`;
   const out=(Array.isArray(messages)?messages:[]).map(m=>({...m}));
@@ -1087,7 +1243,10 @@ function withJsonInstruction(messages) {
   return out;
 }
 
-async function runModelJSON(env, {messages,max_tokens=900,temperature=0.5,top_p=0.9,timeoutMs=18000,allowFallback=true}) {
+async function runModelJSON(env, {messages,max_tokens=900,temperature=0.5,top_p=0.9,timeoutMs=18000,allowFallback=true,ai=null}) {
+  const provider=ai||{provider:"cloudflare",external:false,model:MODEL};
+  if(provider.external) return runExternalJSON(provider,{messages,max_tokens,temperature,top_p,timeoutMs});
+
   const prepared=withJsonInstruction(messages);
   const models=allowFallback?[MODEL,FALLBACK_MODEL]:[MODEL];
   let firstError=null;
@@ -1106,30 +1265,26 @@ async function runModelJSON(env, {messages,max_tokens=900,temperature=0.5,top_p=
         new Promise((_,reject)=>setTimeout(()=>reject(new Error(`AI_TIMEOUT:${model}`)),Math.max(7000,Number(timeoutMs)||18000)))
       ]);
       const parsed=modelResponseObject(result);
-      if(parsed) return {parsed,model};
+      if(parsed) return {parsed,model,provider:"cloudflare"};
       throw new Error(`EMPTY_OR_INVALID_JSON:${model}`);
     } catch(error) {
       firstError ||= error;
       if(aiQuotaExceeded(error)) throw error;
-      // El segundo modelo sirve para JSON roto, timeout o falta temporal de capacidad.
       if(index===models.length-1) throw firstError || error;
     }
   }
   throw firstError || new Error("AI_JSON_FAILED");
 }
 
-async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.5,top_p=0.9,attempts=1,timeoutMs=18000}) {
-  // Compatibilidad para código antiguo. v15 evita JSON Mode porque limita la elección
-  // de modelos y consume demasiada cuota con el 70B; validamos y normalizamos nosotros.
-  const {parsed}=await runModelJSON(env,{messages,max_tokens,temperature,top_p,timeoutMs,allowFallback:true});
+async function runStructured(env, {messages,schema,max_tokens=900,temperature=0.5,top_p=0.9,attempts=1,timeoutMs=18000,ai=null}) {
+  const {parsed}=await runModelJSON(env,{messages,max_tokens,temperature,top_p,timeoutMs,allowFallback:true,ai});
   return parsed;
 }
 
-async function runLooseJSON(env, {messages,max_tokens=900,temperature=0.45,top_p=0.9,timeoutMs=18000}) {
-  const {parsed}=await runModelJSON(env,{messages,max_tokens,temperature,top_p,timeoutMs,allowFallback:true});
+async function runLooseJSON(env, {messages,max_tokens=900,temperature=0.45,top_p=0.9,timeoutMs=18000,ai=null}) {
+  const {parsed}=await runModelJSON(env,{messages,max_tokens,temperature,top_p,timeoutMs,allowFallback:true,ai});
   return parsed;
 }
-
 
 
 function isCampaignOpening(campaign) {
@@ -1199,7 +1354,7 @@ function emergencyOpeningResponse(campaign, reason="") {
   },c);
 }
 
-async function generateOpening(env,campaign) {
+async function generateOpening(env,campaign,ai=null) {
   const compact=publicCampaign(campaign);
   const prompt=`ABRE ESTA CAMPAÑA DE RASTHOR·IA COMO UN NARRADOR DE ROL EXCELENTE.\n\nESTADO:\n${JSON.stringify(compact)}\n\nEscribe una primera escena inmersiva de 180 a 420 palabras. Debe comenzar DENTRO de la acción cotidiana del mundo, usar detalles sensoriales concretos, introducir un gancho que ocurra en escena y terminar con libertad total para actuar. No decidas acciones, emociones ni pensamientos del personaje. No pidas ninguna tirada todavía y no resuelvas secretos de la premisa.\n\nDevuelve EXACTAMENTE este objeto JSON:\n{\n  "title":"título evocador de 2 a 7 palabras",\n  "narrative":[{"kind":"narrator","speaker":"","text":"..."}],\n  "summary":"resumen público compacto del punto de partida",\n  "location":"ubicación inicial concreta",\n  "privateMemory":"secretos o planes iniciales del Narrador; puede quedar vacío"\n}\nLa lista narrative puede contener entre 2 y 5 bloques; si un NPC habla puedes usar kind=\"npc\" y speaker con su nombre.`;
   const {parsed,model}=await runModelJSON(env,{
@@ -1207,7 +1362,7 @@ async function generateOpening(env,campaign) {
       {role:"system",content:"Eres el Narrador de una partida de rol abierta. Escribes español natural, cinematográfico y concreto. Nunca decides por el personaje del jugador."},
       {role:"user",content:prompt}
     ],
-    max_tokens:900,temperature:0.72,top_p:0.92,timeoutMs:16000,allowFallback:true
+    max_tokens:900,temperature:0.72,top_p:0.92,timeoutMs:20000,allowFallback:true,ai
   });
   const narrative=Array.isArray(parsed?.narrative)?parsed.narrative:[];
   if(!narrative.some(x=>x&&typeof x.text==="string"&&x.text.trim())) throw new Error("OPENING_EMPTY");
@@ -1382,6 +1537,25 @@ function fallbackCharacterBuild({concept="",premise="",ancestry="",background=""
   return {classId,priority,ancestry:ancestry||"Humano",background:background||concept||"Una historia todavía por definir.",languages:["Común"],reason:"Asignación de respaldo basada en profesión, entrenamiento, pasado y lógica de atributos de juegos de rol."};
 }
 
+
+function providerConnectionPayload(ai) {
+  if(ai.external) {
+    return {connected:Boolean(ai.apiKey),model:ai.model,provider:ai.provider,providerLabel:ai.label,managed:false,canConnect:true,build:BUILD};
+  }
+  return {connected:true,model:"Qwen3 30B-A3B · RASTHOR·IA Gratis",provider:"cloudflare",providerLabel:"RASTHOR·IA Gratis",managed:true,canConnect:true,build:BUILD};
+}
+
+async function testProvider(ai,env) {
+  if(ai.provider==="cloudflare") return {ok:true,provider:"cloudflare",model:MODEL,label:"RASTHOR·IA Gratis"};
+  const probe=[
+    {role:"system",content:"Responde únicamente JSON."},
+    {role:"user",content:'Devuelve exactamente {"ok":true}.'}
+  ];
+  const {parsed,model}=await runModelJSON(env,{messages:probe,max_tokens:80,temperature:0,top_p:1,timeoutMs:12000,allowFallback:false,ai});
+  if(parsed?.ok!==true && String(parsed?.ok)!=="true") throw new ProviderAIError(ai.provider,502,"probe_failed","El proveedor respondió, pero no completó la prueba correctamente.");
+  return {ok:true,provider:ai.provider,model,label:ai.label};
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
@@ -1392,15 +1566,24 @@ export default {
     if (origin && !isAllowedOrigin(origin)) return json({error:"Origin not allowed"},403,origin);
 
     const url = new URL(request.url);
+    const ai = aiContextFromRequest(request);
     if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/connection")) {
-      if (url.pathname === "/api/connection") {
-        return json({connected:true,model:"Qwen3 30B-A3B · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
-      }
-      return json({ok:true,service:"RASTHOR·IA Narrador",model:MODEL,build:BUILD},200,origin);
+      if (url.pathname === "/api/connection") return json(providerConnectionPayload(ai),200,origin);
+      return json({ok:true,service:"RASTHOR·IA Narrador",model:MODEL,build:BUILD,providers:["cloudflare","openai","gemini"]},200,origin);
     }
 
     if (url.pathname === "/api/connection" && (request.method === "POST" || request.method === "DELETE")) {
-      return json({connected:true,model:"Qwen3 30B-A3B · RASTHOR·IA Cloud",managed:true,canConnect:false,build:BUILD},200,origin);
+      return json(providerConnectionPayload(ai),200,origin);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/provider-test") {
+      try {
+        const result=await testProvider(ai,env);
+        return json(result,200,origin);
+      } catch(error) {
+        if(externalProviderError(error)) return json({ok:false,error:providerErrorMessage(error,ai),provider:ai.provider,code:error.code||"provider_error"},Math.max(400,Math.min(599,Number(error.status)||502)),origin);
+        return json({ok:false,error:"El Narrador gratuito no está disponible ahora.",provider:"cloudflare"},503,origin);
+      }
     }
 
     if (request.method === "POST" && url.pathname === "/api/random-campaign") {
@@ -1439,8 +1622,9 @@ Devuelve solo el JSON solicitado.`;
         {role:"user",content:prompt}
       ];
       try {
-        parsed = await runLooseJSON(env,{messages:campaignMessages,max_tokens:720,temperature:0.82,top_p:0.94,timeoutMs:15000});
+        parsed = await runLooseJSON(env,{messages:campaignMessages,max_tokens:720,temperature:0.82,top_p:0.94,timeoutMs:22000,ai});
       } catch (error) {
+        if(ai.external && externalProviderError(error)) return json({error:providerErrorMessage(error,ai),provider:ai.provider,code:error.code||"provider_error"},Math.max(400,Math.min(599,Number(error.status)||502)),origin);
         console.warn("RASTHOR·IA random campaign local fallback",error);
         parsed=fallbackRandomCampaign(seed,prefs,category,exclude);
         degraded=true;
@@ -1515,8 +1699,9 @@ Devuelve solo el JSON solicitado.`;
         {role:"user",content:prompt}
       ];
       try {
-        parsed=await runLooseJSON(env,{messages:buildMessages,max_tokens:480,temperature:0.45,top_p:0.88,timeoutMs:14000});
+        parsed=await runLooseJSON(env,{messages:buildMessages,max_tokens:480,temperature:0.45,top_p:0.88,timeoutMs:20000,ai});
       } catch(error) {
+        if(ai.external && externalProviderError(error)) return json({error:providerErrorMessage(error,ai),provider:ai.provider,code:error.code||"provider_error"},Math.max(400,Math.min(599,Number(error.status)||502)),origin);
         console.warn("RASTHOR·IA character local fallback",error);
         parsed=fallbackCharacterBuild({concept,premise,ancestry,background});
         degraded=true;
@@ -1550,10 +1735,11 @@ Devuelve solo el JSON solicitado.`;
 
     if (isCampaignOpening(campaign)) {
       try {
-        const opening=await generateOpening(env,campaign);
+        const opening=await generateOpening(env,campaign,ai);
         return json({response:opening.response,vault:opening.response.privateMemory,model:opening.model,opening:true},200,origin);
       } catch (openingError) {
         console.error("RASTHOR·IA opening generation error",openingError);
+        if(ai.external && externalProviderError(openingError)) return json({error:providerErrorMessage(openingError,ai),provider:ai.provider,code:openingError.code||"provider_error"},Math.max(400,Math.min(599,Number(openingError.status)||502)),origin);
         const fallback=emergencyOpeningResponse(campaign,aiErrorText(openingError));
         return json({response:fallback,vault:fallback.privateMemory,degraded:true,degradedReason:aiQuotaExceeded(openingError)?"quota":aiCapacityError(openingError)?"capacity":aiTimeoutError(openingError)?"timeout":"opening_error",opening:true},200,origin);
       }
@@ -1591,7 +1777,7 @@ Devuelve solo el JSON solicitado.`;
         {role:"system",content:SYSTEM},
         {role:"user",content:userPrompt},
       ];
-      let parsed = await runLooseJSON(env,{messages:turnMessages,max_tokens:isOpening?950:900,temperature:isOpening?0.66:0.58,top_p:0.91,timeoutMs:17000});
+      let parsed = await runLooseJSON(env,{messages:turnMessages,max_tokens:isOpening?950:900,temperature:isOpening?0.66:0.58,top_p:0.91,timeoutMs:24000,ai});
       let response = normalizeResponse(parsed,campaign);
       const semanticIssue = semanticProblem(response,campaign);
       if (semanticIssue) {
@@ -1601,7 +1787,8 @@ Devuelve solo el JSON solicitado.`;
       }
       return json({response,vault:response.privateMemory},200,origin);
     } catch (error) {
-      console.error("RASTHOR·IA Workers AI error",error);
+      console.error("RASTHOR·IA Narrador error",error);
+      if(ai.external && externalProviderError(error)) return json({error:providerErrorMessage(error,ai),provider:ai.provider,code:error.code||"provider_error"},Math.max(400,Math.min(599,Number(error.status)||502)),origin);
       try {
         const fallback=emergencyNarradorResponse(campaign);
         const degradedReason=aiQuotaExceeded(error)?"quota":aiCapacityError(error)?"capacity":aiTimeoutError(error)?"timeout":"ai_error";
