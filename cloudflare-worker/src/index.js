@@ -371,6 +371,7 @@ COMBATE
 - Si el objetivo está inequívocamente indefenso/inconsciente y eso ya está establecido en el estado, puedes resolverlo narrativamente cuando no exista incertidumbre. No inventes indefensión para evitar los dados.
 - Los perfiles válidos son brute, skirmisher, ranged, guardian y minion.
 - Si ya hay combate y el turno pertenece a un actor que no es player, usa combatIntent con attack, dodge o flee. No pidas check para ese turno.
+- combatIntent describe SOLO la intención del actor. Si usa attack, narra que apunta, carga, dispara, golpea o inicia el movimiento, pero NO narres impacto, herida, caída, sangre, daño ni muerte: el motor todavía debe tirar ataque y, si acierta, daño.
 - combatIntent.actor debe ser EXACTAMENTE el id del actor cuyo turno muestra combat.order; target debe ser EXACTAMENTE player o el id de otro actor válido.
 - No otorgues XP, objetos ni dinero durante combate: el motor adjudica XP al finalizar.
 
@@ -633,7 +634,7 @@ function isHostileDeclaration(campaign) {
   if (campaign?.combat) return false;
   const action=plainText(declaredAction(campaign));
   if (!action) return false;
-  const hostile=/\b(mato|matar|matand|asesin|apuñal|acuchill|degoll|decapit|corto la cabeza|cortar la cabeza|le corto|lo corto|dispar|tiro a matar|golpeo|pego|ataco|embisto|estrangul|ahorc|rompo el cuello|atravies|clavo (?:la|el|mi)|hiero|herir)\b/i.test(action);
+  const hostile=/\b(mato|matar|matand|asesin|apunal|acuchill|degoll|decapit|corto la cabeza|cortar la cabeza|le corto|lo corto|dispar|tiro a matar|golpeo|pego|ataco|embisto|estrangul|ahorc|rompo el cuello|atravies|clavo (?:la|el|mi)|hiero|herir)\b/i.test(action);
   const harmless=/\b(mato el tiempo|me mata de risa|muerto de risa)\b/i.test(action);
   return hostile && !harmless;
 }
@@ -646,6 +647,11 @@ function narrativeClaimsResolvedViolence(narrative) {
 function narrativeClaimsCheckOutcome(narrative) {
   const text=plainText((Array.isArray(narrative)?narrative:[]).map(x=>x?.text||"").join(" "));
   return /\b(logras|consigues|fallas|fracasas|no logras|no consigues|la puerta (?:cede|se abre)|encuentras (?:la|el|una|un)|descubres|convences|persuades|te cree|acepta tu|rechaza tu|te detecta|te descubre|pasas desapercibido|escapas|consigues escapar|te escondes|rompes (?:la|el)|desactivas|hackeas|descifras|fuerzas (?:la|el)|superas (?:la|el)|pierdes el equilibrio|resbalas y caes)\b/i.test(text);
+}
+
+function narrativeClaimsCombatHit(narrative) {
+  const text=plainText((Array.isArray(narrative)?narrative:[]).map(x=>x?.text||"").join(" "));
+  return /\b(te golpea|te alcanza|te hiere|te corta|te apunala|te atraviesa|impacta contra ti|impacta de lleno|la bala te alcanza|el disparo te alcanza|recibes (?:un|el) golpe|recibes dano|sangras|caes al suelo|hiere a|alcanza a .* con (?:el|la) (?:golpe|disparo|arma))\b/i.test(text);
 }
 
 const GENERIC_ITEM_NAMES = new Set([
@@ -696,7 +702,14 @@ function actionLikelyNeedsD20(campaign) {
 }
 
 function semanticProblem(response,campaign) {
-  if (!response || campaign?.combat) return "";
+  if (!response) return "";
+  if (campaign?.combat) {
+    const currentId=campaign.combat?.order?.[campaign.combat?.index]?.id;
+    if (currentId && currentId!=="player" && response.combatIntent?.action==="attack" && narrativeClaimsCombatHit(response.narrative)) {
+      return "La narración dio por impactado o herido el objetivo de un ataque enemigo antes de que el motor tirara ataque/daño. Narra solo la intención y detente antes del impacto.";
+    }
+    return "";
+  }
   if (isHostileDeclaration(campaign)) {
     if (!response.encounter?.length) {
       return "El jugador declaró un ataque deliberado contra un personaje capaz de reaccionar. Debe abrirse un encounter y resolverse iniciativa/ataque/daño por el motor; un check de habilidad no sustituye el combate.";
