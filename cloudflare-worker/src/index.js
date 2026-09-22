@@ -203,6 +203,31 @@ function clip(value, max) {
   return String(value ?? "").slice(0, max);
 }
 
+function compactInventoryForAI(inventory) {
+  return (Array.isArray(inventory)?inventory:[]).slice(0,100).map(item=>({
+    id:clip(item?.id,100),
+    catalog:clip(item?.catalog,100),
+    name:clip(item?.name,100),
+    quantity:Math.max(0,Number(item?.quantity)||0),
+    description:clip(item?.description,420),
+  }));
+}
+
+function compactEntitiesForAI(entities) {
+  const list=Array.isArray(entities)?entities:[];
+  const quests=list.filter(e=>e?.kind==="quest");
+  const activeQuests=quests.filter(e=>!["completada","fallida","cancelada"].includes(plainText(e?.status)));
+  const terminalQuests=quests.filter(e=>["completada","fallida","cancelada"].includes(plainText(e?.status))).slice(-10);
+  const recentOther=list.filter(e=>e?.kind!=="quest").slice(-28);
+  const seen=new Set();
+  return [...activeQuests,...terminalQuests,...recentOther].filter(e=>{
+    const id=String(e?.id||"");
+    if(!id||seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).slice(0,60);
+}
+
 function publicCampaign(campaign) {
   const c = campaign && typeof campaign === "object" ? campaign : {};
   const character = c.character || {};
@@ -254,7 +279,7 @@ function publicCampaign(campaign) {
       weapon: character.weapon,
       armor: character.armor,
       resources: character.resources,
-      inventory: Array.isArray(character.inventory) ? character.inventory.slice(0, 40) : [],
+      inventory: compactInventoryForAI(character.inventory),
     },
     messages: messages.map((m) => ({
       role: m.role,
@@ -267,7 +292,7 @@ function publicCampaign(campaign) {
     })),
     memory: {
       summary: clip(memory.summary, 4200),
-      entities: Array.isArray(memory.entities) ? memory.entities.slice(-18) : [],
+      entities: compactEntitiesForAI(memory.entities),
       decisions: Array.isArray(memory.decisions) ? memory.decisions.slice(-12) : [],
       flags: memory.flags || {},
       day: memory.day,
@@ -347,11 +372,31 @@ COMBATE
 - combatIntent.actor debe ser EXACTAMENTE el id del actor cuyo turno muestra combat.order; target debe ser EXACTAMENTE player o el id de otro actor válido.
 - No otorgues XP, objetos ni dinero durante combate: el motor adjudica XP al finalizar.
 
+INVENTARIO, DINERO Y RECURSOS — ESTADO AUTORITATIVO
+- character.inventory y character.gold son la verdad mecánica. La narración NO puede inventar que el personaje posee, usa, entrega, pierde, compra o consume algo que el estado no respalda.
+- Si el personaje obtiene, recoge, compra, recibe, fabrica o conserva físicamente un objeto nuevo, usa item_add en ese mismo turno o como consecuencia success/failure de la tirada que lo resuelve.
+- Si entrega, consume, gasta, rompe, abandona, vende o pierde un objeto, usa item_remove con una cantidad válida. Nunca lo retires solo en prosa.
+- item_remove/item_rename solo pueden apuntar a un objeto que realmente exista. Usa preferentemente el id exacto recibido en character.inventory.
+- No concedas dos veces el mismo objeto por narración y efecto. La narración describe el hecho; el efecto cambia el estado.
+- Antes de afirmar "sacas", "usas", "enseñas", "entregas" o equivalentes, comprueba que ese objeto existe y hay cantidad suficiente. Si no existe, dilo naturalmente y deja al jugador buscar otra solución.
+- currency representa TODO cambio real de dinero. Comprar resta; cobrar/vender/recompensa suma. Nunca cambies dinero solo en prosa.
+- No conviertas equipo narrativo genérico en objetos infinitos. Herramientas básicas pueden justificar una acción si el inventario las contiene, pero consumibles, llaves, documentos, munición especial, medicinas y objetos únicos deben existir de forma explícita.
+
+MISIONES / OBJETIVOS
+- Las misiones viven en memory.entities con kind="quest". Son memoria persistente, no texto decorativo.
+- Crea una quest cuando aparezca un objetivo concreto y accionable que el personaje acepte, reciba o decida perseguir. No conviertas cada conversación, pista o curiosidad en misión.
+- Reutiliza SIEMPRE el mismo id para actualizar una misión existente. No crees duplicados con nombres ligeramente distintos.
+- Estados canónicos: "activa", "completada", "fallida" o "cancelada".
+- Una misión activa solo pasa a completada cuando los hechos de la historia confirman que su objetivo realmente se cumplió. Una intención del jugador ("entrego el paquete", "ya lo hice") no basta si todavía existe incertidumbre o falta resolver una tirada/reacción del mundo.
+- "completada", "fallida" y "cancelada" son estados terminales: no vuelvas una misión a "activa" salvo que se trate explícitamente de una NUEVA misión con otro id.
+- Si cambia el objetivo o aparece progreso relevante, actualiza description/status del mismo id de quest.
+- Las recompensas de misión no existen hasta que se entregan realmente: objetos con item_add, dinero con currency y XP con xp.
+- No borres misiones antiguas de la memoria; conserva su estado para continuidad y para que el jugador pueda revisar qué ocurrió.
+
 EFECTOS
 - Usa solo efectos mecánicos válidos: item_add, item_remove, item_rename, currency, xp, condition_add, condition_remove, wound.
 - wound SOLO puede tener target="player". Nunca uses wound para NPC, enemigos ni aliados.
 - condition_add/condition_remove fuera de combate SOLO pueden apuntar a "player". En combate pueden apuntar a "player" o al id exacto de un actor activo.
-- item_remove/item_rename solo pueden apuntar a un objeto que realmente exista en el inventario actual.
 - Si el jugador intenta herir o matar a un NPC capaz de resistirse y todavía no hay combate, normalmente inicia un encounter en vez de aplicar wound o declarar la muerte directamente.
 - No uses efectos para cosas que pueden quedar solo narrativas.
 - XP fuera de combate debe ser moderada y justificada.
@@ -397,7 +442,9 @@ MEMORIA
 - privateMemory contiene secretos del Director, planes, verdades ocultas, identidades secretas y consecuencias todavía no reveladas. Conserva secretos previos y añade solo lo necesario. No reveles privateMemory en narrative.
 
 CONSULTAS DE ESTADO
-- Si lastEvent es una consulta sobre inventario, equipo, ubicación, hora, estado físico o información evidente ya presente en el estado, responde de forma natural usando esos datos y devuelve check=null, encounter=null, combatIntent=null y effects=[].
+- Si lastEvent es una consulta sobre inventario, equipo, dinero, misiones/objetivos, ubicación, hora, estado físico o información evidente ya presente en el estado, responde usando EXCLUSIVAMENTE esos datos y devuelve check=null, encounter=null, combatIntent=null y effects=[].
+- Si preguntan "qué tengo", enumera solo character.inventory con cantidades reales; distingue weapon/armor equipados cuando corresponda. No reconstruyas inventario desde la narración.
+- Si preguntan por misiones, usa memory.entities kind="quest": indica activas y, si aporta valor, las completadas/fallidas/canceladas. No inventes objetivos que no estén registrados.
 - Nunca conviertas una pregunta informativa simple en una tirada.
 - Si falta un dato, dilo narrativamente sin inventar una prueba solo para obtenerlo.
 
@@ -425,7 +472,60 @@ function validEffect(effect,campaign) {
 }
 
 function sanitizeEffects(effects,campaign) {
-  return (Array.isArray(effects)?effects:[]).filter(e=>validEffect(e,campaign)).slice(0,10);
+  const source=(Array.isArray(effects)?effects:[]).slice(0,10);
+  const inventory=(Array.isArray(campaign?.character?.inventory)?campaign.character.inventory:[]).map(i=>({...i}));
+  const quantities=new Map(inventory.map(i=>[i.id,Number(i.quantity)||0]));
+  let gold=Number(campaign?.character?.gold||0);
+  const out=[];
+
+  function resolveItem(target) {
+    const key=plainText(target).trim();
+    if(!key) return null;
+    return inventory.find(i=>i?.id===target || i?.catalog===target || i?.name===target)
+      || inventory.find(i=>plainText(i?.name)===key || plainText(i?.catalog)===key)
+      || null;
+  }
+
+  for(const raw of source) {
+    if(!raw || typeof raw!=="object" || !Number.isInteger(raw.amount)) continue;
+    const e={...raw,text:clip(raw.text,500),target:clip(raw.target,100)};
+
+    if(e.type==="item_remove") {
+      const item=resolveItem(e.target);
+      if(!item || e.amount<1 || e.amount>20) continue;
+      const available=quantities.get(item.id)||0;
+      if(available<e.amount) continue;
+      quantities.set(item.id,available-e.amount);
+      e.target=item.id;
+      out.push(e);
+      continue;
+    }
+
+    if(e.type==="item_rename") {
+      const item=resolveItem(e.target);
+      if(!item || !String(e.text||"").trim()) continue;
+      e.target=item.id;
+      e.amount=0;
+      out.push(e);
+      continue;
+    }
+
+    if(e.type==="currency") {
+      if(Math.abs(e.amount)>1000 || gold+e.amount<0) continue;
+      gold+=e.amount;
+      out.push(e);
+      continue;
+    }
+
+    if(e.type==="item_add") {
+      if(e.amount<1 || e.amount>20 || !String(e.target||"").trim()) continue;
+      out.push(e);
+      continue;
+    }
+
+    if(validEffect(e,campaign)) out.push(e);
+  }
+  return out;
 }
 
 const SKILL_ABILITY = {
@@ -471,6 +571,14 @@ function sanitizeCombatIntent(intent,campaign) {
   return intent;
 }
 
+function canonicalQuestStatus(status) {
+  const s=plainText(status).trim();
+  if(/complet|cumplid|terminad|resuelt/.test(s)) return "completada";
+  if(/fall|fracas|perdid|imposible/.test(s)) return "fallida";
+  if(/cancel|abandon|rechaz/.test(s)) return "cancelada";
+  return "activa";
+}
+
 function sanitizeEntities(entities,campaign) {
   const existing=new Map((campaign?.memory?.entities||[]).map(e=>[e.id,e]));
   return (Array.isArray(entities)?entities:[]).filter(e=>{
@@ -480,13 +588,16 @@ function sanitizeEntities(entities,campaign) {
     if(!id||!name||["__proto__","constructor","prototype"].includes(id)) return false;
     const old=existing.get(id);
     if(old?.status==="muerto" && e.status!=="muerto") return false;
+    if(old?.kind==="quest" && ["completada","fallida","cancelada"].includes(canonicalQuestStatus(old.status))) {
+      if(canonicalQuestStatus(e.status)!==canonicalQuestStatus(old.status)) return false;
+    }
     return true;
   }).slice(0,20).map(e=>({
     ...e,
     id:clip(e.id,100),
     name:clip(e.name,100),
     description:clip(e.description,1800),
-    status:clip(e.status,100),
+    status:e.kind==="quest"?canonicalQuestStatus(e.status):clip(e.status,100),
     relation:Math.max(-100,Math.min(100,Number(e.relation)||0)),
   }));
 }
