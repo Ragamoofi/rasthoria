@@ -688,7 +688,7 @@ function narrativeClaimsResolvedViolence(narrative) {
 
 function narrativeClaimsCheckOutcome(narrative) {
   const text=plainText((Array.isArray(narrative)?narrative:[]).map(x=>x?.text||"").join(" "));
-  return /\b(logras|consigues|fallas|fracasas|no logras|no consigues|la puerta (?:cede|se abre)|encuentras (?:la|el|una|un)|descubres|convences|persuades|te cree|acepta tu|rechaza tu|te detecta|te descubre|pasas desapercibido|escapas|consigues escapar|te escondes|rompes (?:la|el)|desactivas|hackeas|descifras|fuerzas (?:la|el)|superas (?:la|el)|pierdes el equilibrio|resbalas y caes)\b/i.test(text);
+  return /\b(logras|consigues|fallas|fracasas|no logras|no consigues|la (?:puerta|cerradura|ventana|compuerta) (?:cede|se abre)|encuentras (?:la|el|una|un)|descubres|convences|persuades|te cree|cree tu version|acepta tu|rechaza tu|accede a|asiente|cede ante|te deja pasar|te permite pasar|te detecta|te descubre|no te detecta|no te ve|nadie te ve|pasas desapercibido|pasas sin ser visto|escapas|consigues escapar|te escondes|rompes (?:la|el)|desactivas|hackeas|descifras|fuerzas (?:la|el)|superas (?:la|el)|pierdes el equilibrio|resbalas y caes)\b/i.test(text);
 }
 
 function narrativeClaimsCombatHit(narrative) {
