@@ -1,5 +1,5 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const BUILD = "2026-09-21-rules-v6-continuity";
+const BUILD = "2026-09-21-rules-v7-long-memory";
 const ALLOWED_ORIGINS = new Set([
   "https://ragamoofi.github.io",
   "https://umbral-rpg-oscar.o-sariego.chatgpt.site",
@@ -204,6 +204,15 @@ function clip(value, max) {
   return String(value ?? "").slice(0, max);
 }
 
+function clipContext(value,max) {
+  const text=String(value??"");
+  if(text.length<=max) return text;
+  const marker="\n…[memoria intermedia resumida]…\n";
+  const room=Math.max(0,max-marker.length);
+  const head=Math.ceil(room*.46),tail=room-head;
+  return text.slice(0,head)+marker+text.slice(-tail);
+}
+
 function compactInventoryForAI(inventory) {
   return (Array.isArray(inventory)?inventory:[]).slice(0,100).map(item=>({
     id:clip(item?.id,100),
@@ -219,9 +228,14 @@ function compactEntitiesForAI(entities) {
   const quests=list.filter(e=>e?.kind==="quest");
   const activeQuests=quests.filter(e=>!["completada","fallida","cancelada"].includes(plainText(e?.status)));
   const terminalQuests=quests.filter(e=>["completada","fallida","cancelada"].includes(plainText(e?.status))).slice(-10);
+  const important=list.filter(e=>e?.kind!=="quest" && (
+    Math.abs(Number(e?.relation)||0)>=20 ||
+    ["faction","secret"].includes(e?.kind) ||
+    !["","activo","activa","vivo","viva","conocido","conocida","neutral"].includes(plainText(e?.status))
+  )).slice(-20);
   const recentOther=list.filter(e=>e?.kind!=="quest").slice(-28);
   const seen=new Set();
-  return [...activeQuests,...terminalQuests,...recentOther].filter(e=>{
+  return [...activeQuests,...important,...terminalQuests,...recentOther].filter(e=>{
     const id=String(e?.id||"");
     if(!id||seen.has(id)) return false;
     seen.add(id);
@@ -240,8 +254,8 @@ function publicCampaign(campaign) {
   const c = campaign && typeof campaign === "object" ? campaign : {};
   const character = c.character || {};
   const memory = c.memory || {};
-  const messages = Array.isArray(c.messages) ? c.messages.slice(-8) : [];
-  const rolls = Array.isArray(c.rolls) ? c.rolls.slice(-5) : [];
+  const messages = Array.isArray(c.messages) ? c.messages.slice(-10) : [];
+  const rolls = Array.isArray(c.rolls) ? c.rolls.slice(-7) : [];
   const combat = c.combat || null;
   return {
     title: clip(c.title, 120),
@@ -301,9 +315,9 @@ function publicCampaign(campaign) {
       } : undefined,
     })),
     memory: {
-      summary: clip(memory.summary, 4200),
+      summary: clipContext(memory.summary, 5600),
       entities: compactEntitiesForAI(memory.entities),
-      decisions: Array.isArray(memory.decisions) ? memory.decisions.slice(-12) : [],
+      decisions: Array.isArray(memory.decisions) ? memory.decisions.slice(-18) : [],
       flags: memory.flags || {},
       day: memory.day,
       minute: memory.minute,
@@ -329,7 +343,7 @@ function publicCampaign(campaign) {
       })) : [],
     } : null,
     rolls,
-    gmVault: clip(c.gmVault, 6000),
+    gmVault: clipContext(c.gmVault, 9000),
     lastRestAvailable: Boolean(c.lastRestAvailable),
   };
 }
