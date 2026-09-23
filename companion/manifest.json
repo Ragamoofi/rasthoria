@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "RASTHOR·IA Companion",
+  "version": "0.1.0",
+  "description": "Mesa de rol local para jugar en ChatGPT sin API ni tokens extra.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
